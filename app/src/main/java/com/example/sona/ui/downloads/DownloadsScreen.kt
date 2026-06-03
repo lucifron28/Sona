@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
@@ -228,10 +230,22 @@ private fun DownloadProgress(
         download.status == DownloadStatus.COMPLETED
 
     if (determinate) {
-        LinearProgressIndicator(
-            progress = { (download.progress / 100f).coerceIn(0f, 1f) },
+        Row(
             modifier = modifier.fillMaxWidth(),
-        )
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LinearProgressIndicator(
+                progress = { (download.progress / 100f).coerceIn(0f, 1f) },
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = download.progressPercentLabel,
+                modifier = Modifier.widthIn(min = 44.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     } else {
         LinearProgressIndicator(modifier = modifier.fillMaxWidth())
     }
@@ -251,15 +265,15 @@ private val DownloadStatus.label: String
 private val DownloadItem.statusLine: String
     get() {
         val percent = when (status) {
-            DownloadStatus.DOWNLOADING,
-            DownloadStatus.EXTRACTING,
-            -> " ${progress.coerceIn(0f, 100f).toInt()}%"
             DownloadStatus.COMPLETED -> " 100%"
             else -> ""
         }
         val workSuffix = workId?.take(8)?.let { " - work $it" } ?: ""
         return status.label + percent + workSuffix
     }
+
+private val DownloadItem.progressPercentLabel: String
+    get() = "${progress.coerceIn(0f, 100f).toInt()}%"
 
 private val DownloadStatus.inProgress: Boolean
     get() = when (this) {

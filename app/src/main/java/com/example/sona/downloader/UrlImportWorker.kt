@@ -1,6 +1,7 @@
 package com.example.sona.downloader
 
 import android.content.Context
+import androidx.room.withTransaction
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.sona.data.database.SonaDatabase
@@ -154,13 +155,14 @@ class UrlImportWorker(
             }
             DownloadLogger.info(downloadId, "yt-dlp execute finished")
 
+            DownloadLogger.info(downloadId, "Finalizing downloaded audio")
             updateState(
                 repository = downloadRepository,
                 id = downloadId,
                 status = DownloadStatus.EXTRACTING,
                 title = title,
-                progress = 95f,
-                diagnosticMessage = "Download finished. Locating audio output.",
+                progress = 99f,
+                diagnosticMessage = "Audio downloaded. Adding to library.",
             )
 
             val outputFile = findOutputFile(outputDirectory, downloadId)
@@ -172,13 +174,15 @@ class UrlImportWorker(
                 fallbackArtist = artist,
                 sourceUrl = downloadItem.url,
             )
-            songRepository.addSong(song)
-            DownloadLogger.info(downloadId, "Song added to library title=${song.title}")
-            downloadRepository.markCompleted(
-                id = downloadId,
-                title = song.title,
-                outputUri = song.uri,
-            )
+            database.withTransaction {
+                songRepository.addSong(song)
+                downloadRepository.markCompleted(
+                    id = downloadId,
+                    title = song.title,
+                    outputUri = song.uri,
+                )
+            }
+            DownloadLogger.info(downloadId, "Song added and download completed title=${song.title}")
 
             Result.success()
         } catch (error: YoutubeDL.CanceledException) {
