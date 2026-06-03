@@ -8,7 +8,6 @@ import com.example.sona.data.repository.DownloadRepository
 import com.example.sona.data.repository.SongRepository
 import com.example.sona.domain.model.DownloadStatus
 import com.example.sona.storage.AppMusicStorage
-import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
@@ -47,9 +46,8 @@ class UrlImportWorker(
                 status = DownloadStatus.FETCHING_METADATA,
                 diagnosticMessage = "Worker started. Initializing downloader.",
             )
-            DownloadLogger.info(downloadId, "Initializing YoutubeDL and FFmpeg")
+            DownloadLogger.info(downloadId, "Initializing YoutubeDL")
             YoutubeDL.getInstance().init(applicationContext)
-            FFmpeg.getInstance().init(applicationContext)
 
             updateState(
                 repository = downloadRepository,
@@ -68,7 +66,7 @@ class UrlImportWorker(
                 id = downloadId,
                 status = DownloadStatus.DOWNLOADING,
                 title = title,
-                diagnosticMessage = "Metadata fetched. Preparing audio download.",
+                diagnosticMessage = "Metadata fetched. Preparing best audio download.",
             )
 
             val outputDirectory = File(applicationContext.filesDir, "music").apply {
@@ -76,14 +74,7 @@ class UrlImportWorker(
             }
             val outputTemplate = File(outputDirectory, "sona-import-$downloadId.%(ext)s")
             DownloadLogger.info(downloadId, "Output template=${outputTemplate.absolutePath}")
-            val request = singleVideoRequest(downloadItem.url).apply {
-                addOption("--extract-audio")
-                addOption("--audio-format", "m4a")
-                addOption("--audio-quality", "0")
-                addOption("--newline")
-                addOption("--no-mtime")
-                addOption("-o", outputTemplate.absolutePath)
-            }
+            val request = audioDownloadRequest(downloadItem.url, outputTemplate)
 
             DownloadLogger.info(downloadId, "Starting yt-dlp execute processId=$processId")
             var latestProgress = 0f
@@ -124,7 +115,7 @@ class UrlImportWorker(
                 status = DownloadStatus.EXTRACTING,
                 title = title,
                 progress = 95f,
-                diagnosticMessage = "Download finished. Locating extracted audio.",
+                diagnosticMessage = "Download finished. Locating audio output.",
             )
 
             val outputFile = findOutputFile(outputDirectory, downloadId)
@@ -182,6 +173,17 @@ class UrlImportWorker(
             addOption("--no-playlist")
         }
 
+    private fun audioDownloadRequest(
+        url: String,
+        outputTemplate: File,
+    ): YoutubeDLRequest =
+        singleVideoRequest(url).apply {
+            addOption("-f", AUDIO_FORMAT_SELECTOR)
+            addOption("--newline")
+            addOption("--no-mtime")
+            addOption("-o", outputTemplate.absolutePath)
+        }
+
     private fun String?.cleanedDownloaderLine(): String? =
         this
             ?.trim()
@@ -214,6 +216,7 @@ class UrlImportWorker(
     }
 
     private companion object {
+        const val AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best"
         const val MAX_DIAGNOSTIC_LENGTH = 180
     }
 }

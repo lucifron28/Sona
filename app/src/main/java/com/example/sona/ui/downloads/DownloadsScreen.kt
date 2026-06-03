@@ -242,7 +242,7 @@ private val DownloadStatus.label: String
         DownloadStatus.QUEUED -> "Queued"
         DownloadStatus.FETCHING_METADATA -> "Fetching metadata"
         DownloadStatus.DOWNLOADING -> "Downloading"
-        DownloadStatus.EXTRACTING -> "Extracting audio"
+        DownloadStatus.EXTRACTING -> "Finalizing"
         DownloadStatus.COMPLETED -> "Completed"
         DownloadStatus.FAILED -> "Failed"
         DownloadStatus.CANCELLED -> "Cancelled"
