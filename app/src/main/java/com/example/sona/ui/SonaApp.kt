@@ -184,6 +184,7 @@ fun SonaApp(
                     onImportClick = downloadsViewModel::enqueueImport,
                     onUpdateDownloader = downloadsViewModel::updateDownloader,
                     onDeleteDownload = downloadsViewModel::deleteDownload,
+                    onSnackbarShown = downloadsViewModel::consumeSnackbar,
                 )
             }
             composable(SonaDestination.Playlists.route) {
