@@ -1,20 +1,29 @@
 package com.example.sona.ui.nowplaying
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -29,18 +38,31 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.sona.core.utils.formatDuration
 import com.example.sona.domain.model.Song
 import com.example.sona.playback.PlaybackRepeatMode
 import com.example.sona.playback.PlaybackState
 import com.example.sona.ui.components.SonaDefaultAlbumArt
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 fun NowPlayingScreen(
@@ -53,6 +75,8 @@ fun NowPlayingScreen(
     onToggleShuffle: () -> Unit,
     onCycleRepeatMode: () -> Unit,
     onQueueSongClick: (Song) -> Unit,
+    onMoveQueueItem: (Int, Int) -> Unit,
+    onRemoveQueueSong: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (playbackState.currentSong == null) {
@@ -128,10 +152,13 @@ fun NowPlayingScreen(
             onSkipPrevious = onSkipPrevious,
         )
 
-        QueueList(
+        ExpandableQueuePanel(
             queue = playbackState.queue,
             currentSongId = currentSong.id,
+            queueIndex = playbackState.queueIndex,
             onQueueSongClick = onQueueSongClick,
+            onMoveQueueItem = onMoveQueueItem,
+            onRemoveQueueSong = onRemoveQueueSong,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -319,82 +346,222 @@ private fun PlaybackControls(
 }
 
 @Composable
-private fun QueueList(
+private fun ExpandableQueuePanel(
     queue: List<Song>,
     currentSongId: Long,
+    queueIndex: Int,
     onQueueSongClick: (Song) -> Unit,
+    onMoveQueueItem: (Int, Int) -> Unit,
+    onRemoveQueueSong: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (queue.isEmpty()) return
 
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(queue.size) {
+        if (queue.isEmpty()) expanded = false
+    }
+
     Column(modifier = modifier.padding(top = 8.dp)) {
-        Row(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .clickable { expanded = !expanded },
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = MaterialTheme.shapes.small,
+            tonalElevation = 4.dp,
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Queue",
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Queue",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = queueSummary(queueIndex = queueIndex, queueSize = queue.size),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Collapse queue" else "Expand queue",
+                )
+            }
         }
 
-        queue.forEachIndexed { index, song ->
-            val isCurrent = song.id == currentSongId
-            ListItem(
-                modifier = Modifier.clickable { onQueueSongClick(song) },
-                leadingContent = {
-                    Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 8.dp)
+                    .clip(MaterialTheme.shapes.small),
+            ) {
+                queue.forEachIndexed { index, song ->
+                    DraggableQueueRow(
+                        index = index,
+                        song = song,
+                        isCurrent = song.id == currentSongId,
+                        queueSize = queue.size,
+                        onClick = { onQueueSongClick(song) },
+                        onMove = onMoveQueueItem,
+                        onRemove = { onRemoveQueueSong(song) },
                     )
-                },
-                headlineContent = {
-                    Text(
-                        text = song.title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        text = if (isCurrent) {
-                            "Now playing - ${song.artist}"
-                        } else {
-                            song.artist
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                trailingContent = {
-                    Text(
-                        text = formatDuration(song.durationMs),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-            )
-            if (index < queue.lastIndex) {
-                HorizontalDivider()
+                    if (index < queue.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun DraggableQueueRow(
+    index: Int,
+    song: Song,
+    isCurrent: Boolean,
+    queueSize: Int,
+    onClick: () -> Unit,
+    onMove: (Int, Int) -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val rowHeightPx = with(density) { QueueRowHeight.toPx() }
+    var dragOffsetX by remember(song.id) { mutableStateOf(0f) }
+    var dragOffsetY by remember(song.id) { mutableStateOf(0f) }
+    val revealTrash = abs(dragOffsetX) > TrashRevealDistancePx
+
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val removeThresholdPx = with(density) { maxWidth.toPx() * 0.34f }
+        val trashAlignment = if (dragOffsetX >= 0f) Alignment.CenterStart else Alignment.CenterEnd
+
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    color = if (revealTrash) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        Color.Transparent
+                    },
+                ),
+        ) {
+            if (revealTrash) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(trashAlignment)
+                        .padding(horizontal = 24.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+
+        ListItem(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        x = dragOffsetX.roundToInt(),
+                        y = dragOffsetY.roundToInt(),
+                    )
+                }
+                .pointerInput(index, queueSize, song.id) {
+                    detectDragGestures(
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragOffsetX += dragAmount.x
+                            dragOffsetY += dragAmount.y
+                        },
+                        onDragEnd = {
+                            val shouldRemove = abs(dragOffsetX) >= removeThresholdPx
+                            val targetIndex = (index + (dragOffsetY / rowHeightPx).roundToInt())
+                                .coerceIn(0, queueSize - 1)
+
+                            dragOffsetX = 0f
+                            dragOffsetY = 0f
+
+                            if (shouldRemove) {
+                                onRemove()
+                            } else if (targetIndex != index) {
+                                onMove(index, targetIndex)
+                            }
+                        },
+                        onDragCancel = {
+                            dragOffsetX = 0f
+                            dragOffsetY = 0f
+                        },
+                    )
+                }
+                .clickable(onClick = onClick),
+            leadingContent = {
+                Text(
+                    text = "${index + 1}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isCurrent) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            },
+            headlineContent = {
+                Text(
+                    text = song.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (isCurrent) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
+            },
+            supportingContent = {
+                Text(
+                    text = if (isCurrent) {
+                        "Now playing - ${song.artist}"
+                    } else {
+                        song.artist
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            trailingContent = {
+                Text(
+                    text = formatDuration(song.durationMs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
+    }
+}
+
+private fun queueSummary(
+    queueIndex: Int,
+    queueSize: Int,
+): String = if (queueIndex >= 0) {
+    "${queueIndex + 1} of $queueSize"
+} else {
+    "$queueSize tracks"
+}
+
+private val QueueRowHeight = 72.dp
+private const val TrashRevealDistancePx = 12f

@@ -159,6 +159,53 @@ class PlayerController(context: Context) {
         }
     }
 
+    fun playQueueSong(song: Song) {
+        val index = queue.indexOfFirst { it.id == song.id }
+        if (index < 0) return
+
+        withController { controller ->
+            if (index >= controller.mediaItemCount) return@withController
+
+            controller.seekToDefaultPosition(index)
+            controller.play()
+            syncState()
+        }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val nextQueue = queue.moveItem(fromIndex, toIndex)
+        if (nextQueue === queue) return
+
+        queue = nextQueue
+        withController { controller ->
+            if (fromIndex >= controller.mediaItemCount || toIndex >= controller.mediaItemCount) {
+                syncState()
+                return@withController
+            }
+
+            controller.moveMediaItem(fromIndex, toIndex)
+            syncState()
+        }
+    }
+
+    fun removeQueueItem(song: Song) {
+        val index = queue.indexOfFirst { it.id == song.id }
+        if (index < 0) return
+
+        queue = queue.removeIndex(index)
+        withController { controller ->
+            if (index < controller.mediaItemCount) {
+                controller.removeMediaItem(index)
+            }
+            if (queue.isEmpty()) {
+                controller.stop()
+            } else if (controller.playbackState == Player.STATE_IDLE) {
+                controller.prepare()
+            }
+            syncState()
+        }
+    }
+
     fun stop() {
         withController { controller ->
             controller.stop()

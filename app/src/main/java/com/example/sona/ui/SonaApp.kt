@@ -244,9 +244,9 @@ fun SonaApp(
                 onSkipPrevious = appContainer.playerController::skipPrevious,
                 onToggleShuffle = appContainer.playerController::toggleShuffle,
                 onCycleRepeatMode = appContainer.playerController::cycleRepeatMode,
-                onQueueSongClick = { song ->
-                    appContainer.playerController.play(song, playbackState.queue)
-                },
+                onQueueSongClick = appContainer.playerController::playQueueSong,
+                onMoveQueueItem = appContainer.playerController::moveQueueItem,
+                onRemoveQueueSong = appContainer.playerController::removeQueueItem,
             )
         }
     }
