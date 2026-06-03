@@ -6,6 +6,7 @@ import com.example.sona.data.repository.DownloadRepository
 import com.example.sona.data.repository.PlaylistRepository
 import com.example.sona.data.repository.SongRepository
 import com.example.sona.data.settings.SettingsRepository
+import com.example.sona.downloader.UrlImportManager
 import com.example.sona.playback.PlayerController
 import com.example.sona.storage.AppMusicStorage
 
@@ -26,6 +27,10 @@ class AppContainer(context: Context) {
 
     val downloadRepository: DownloadRepository by lazy {
         DownloadRepository(database.downloadDao())
+    }
+
+    val urlImportManager: UrlImportManager by lazy {
+        UrlImportManager(applicationContext, downloadRepository)
     }
 
     val appMusicStorage: AppMusicStorage by lazy {

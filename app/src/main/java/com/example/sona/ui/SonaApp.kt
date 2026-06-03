@@ -3,6 +3,7 @@ package com.example.sona.ui
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -31,6 +32,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.sona.di.AppContainer
+import com.example.sona.ui.downloads.DownloadsScreen
+import com.example.sona.ui.downloads.DownloadsViewModel
+import com.example.sona.ui.downloads.DownloadsViewModelFactory
 import com.example.sona.ui.library.LibraryScreen
 import com.example.sona.ui.library.LibraryViewModel
 import com.example.sona.ui.library.LibraryViewModelFactory
@@ -69,6 +73,12 @@ fun SonaApp(
         PlaylistsViewModelFactory(
             playlistRepository = appContainer.playlistRepository,
             songRepository = appContainer.songRepository,
+        )
+    }
+    val downloadsViewModelFactory = remember(appContainer) {
+        DownloadsViewModelFactory(
+            downloadRepository = appContainer.downloadRepository,
+            urlImportManager = appContainer.urlImportManager,
         )
     }
     val currentSongId = playbackState.currentSong?.id
@@ -153,6 +163,21 @@ fun SonaApp(
                     onClearError = libraryViewModel::clearError,
                 )
             }
+            composable(SonaDestination.Downloads.route) {
+                val downloadsViewModel: DownloadsViewModel = viewModel(
+                    factory = downloadsViewModelFactory,
+                )
+                val uiState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+
+                DownloadsScreen(
+                    contentPadding = innerPadding,
+                    uiState = uiState,
+                    onUrlChange = downloadsViewModel::setUrl,
+                    onImportClick = downloadsViewModel::enqueueImport,
+                    onUpdateDownloader = downloadsViewModel::updateDownloader,
+                    onDeleteDownload = downloadsViewModel::deleteDownload,
+                )
+            }
             composable(SonaDestination.Playlists.route) {
                 val playlistsViewModel: PlaylistsViewModel = viewModel(
                     factory = playlistsViewModelFactory,
@@ -210,18 +235,21 @@ fun SonaApp(
 private val SonaDestination.icon: ImageVector
     get() = when (this) {
         SonaDestination.Library -> Icons.Filled.LibraryMusic
+        SonaDestination.Downloads -> Icons.Filled.Download
         SonaDestination.Playlists -> Icons.AutoMirrored.Filled.QueueMusic
         SonaDestination.Settings -> Icons.Filled.Settings
     }
 
 private val NavDestinationLabel = mapOf(
     SonaDestination.Library.route to SonaDestination.Library.label,
+    SonaDestination.Downloads.route to SonaDestination.Downloads.label,
     SonaDestination.Playlists.route to SonaDestination.Playlists.label,
     SonaDestination.Settings.route to SonaDestination.Settings.label,
 )
 
 private val sonaDestinations = listOf(
     SonaDestination.Library,
+    SonaDestination.Downloads,
     SonaDestination.Playlists,
     SonaDestination.Settings,
 )
