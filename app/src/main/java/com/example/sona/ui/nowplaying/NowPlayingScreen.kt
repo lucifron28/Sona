@@ -1,6 +1,7 @@
 package com.example.sona.ui.nowplaying
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.example.sona.core.utils.formatDuration
 import com.example.sona.domain.model.Song
 import com.example.sona.playback.PlaybackRepeatMode
@@ -360,8 +362,19 @@ private fun ExpandableQueuePanel(
     if (queue.isEmpty()) return
 
     var expanded by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val queueScrollState = rememberScrollState()
+    val rowHeightPx = with(density) { QueueRowHeight.toPx() }
+    val queuePanelMaxHeightPx = with(density) { QueuePanelMaxHeight.toPx() }
+    var reorderDrag by remember { mutableStateOf<QueueReorderDrag?>(null) }
+
     LaunchedEffect(queue.size) {
         if (queue.isEmpty()) expanded = false
+    }
+    LaunchedEffect(queue) {
+        reorderDrag = reorderDrag?.takeIf { drag ->
+            queue.any { song -> song.id == drag.songId }
+        }
     }
 
     Column(modifier = modifier.padding(top = 8.dp)) {
@@ -408,19 +421,89 @@ private fun ExpandableQueuePanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
-                    .heightIn(max = 360.dp)
+                    .heightIn(max = QueuePanelMaxHeight)
                     .clip(MaterialTheme.shapes.small)
                     .clipToBounds()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(queueScrollState),
             ) {
+                val targetIndex = reorderDrag?.targetIndex(
+                    queueSize = queue.size,
+                    rowHeightPx = rowHeightPx,
+                )
+
                 queue.forEachIndexed { index, song ->
                     DraggableQueueRow(
                         index = index,
                         song = song,
                         isCurrent = song.id == currentSongId,
+                        isReorderActive = reorderDrag?.songId == song.id,
+                        reorderOffsetY = queueRowReorderOffsetY(
+                            index = index,
+                            songId = song.id,
+                            drag = reorderDrag,
+                            targetIndex = targetIndex,
+                            rowHeightPx = rowHeightPx,
+                        ),
                         queueSize = queue.size,
                         onClick = { onQueueSongClick(song) },
-                        onMove = onMoveQueueItem,
+                        onReorderStart = {
+                            reorderDrag = QueueReorderDrag(
+                                songId = song.id,
+                                fromIndex = index,
+                                offsetY = 0f,
+                            )
+                        },
+                        onReorderDrag = { dragAmount ->
+                            reorderDrag = (reorderDrag ?: QueueReorderDrag(
+                                songId = song.id,
+                                fromIndex = index,
+                                offsetY = 0f,
+                            )).let { drag ->
+                                if (drag.songId != song.id) {
+                                    QueueReorderDrag(
+                                        songId = song.id,
+                                        fromIndex = index,
+                                        offsetY = 0f,
+                                    )
+                                } else {
+                                    val visibleHeightPx = (queue.size * rowHeightPx)
+                                        .coerceAtMost(queuePanelMaxHeightPx)
+                                    val rowTopPx = drag.fromIndex * rowHeightPx
+                                    val minQueueOffsetY = -drag.fromIndex * rowHeightPx
+                                    val maxQueueOffsetY = (queue.lastIndex - drag.fromIndex) * rowHeightPx
+                                    val minVisibleOffsetY = queueScrollState.value - rowTopPx
+                                    val maxVisibleOffsetY = queueScrollState.value +
+                                        visibleHeightPx -
+                                        rowTopPx -
+                                        rowHeightPx
+                                    val minOffsetY = maxOf(minQueueOffsetY, minVisibleOffsetY)
+                                    val maxOffsetY = minOf(maxQueueOffsetY, maxVisibleOffsetY)
+
+                                    drag.copy(
+                                        offsetY = (drag.offsetY + dragAmount)
+                                            .coerceIn(minOffsetY, maxOffsetY),
+                                    )
+                                }
+                            }
+                        },
+                        onReorderEnd = {
+                            val drag = reorderDrag
+                            val finalTargetIndex = drag?.targetIndex(
+                                queueSize = queue.size,
+                                rowHeightPx = rowHeightPx,
+                            )
+                            reorderDrag = null
+
+                            if (drag != null &&
+                                finalTargetIndex != null &&
+                                finalTargetIndex != drag.fromIndex
+                            ) {
+                                onMoveQueueItem(drag.fromIndex, finalTargetIndex)
+                            }
+                        },
+                        onReorderCancel = {
+                            reorderDrag = null
+                        },
                         onRemove = { onRemoveQueueSong(song) },
                     )
                     if (index < queue.lastIndex) {
@@ -437,21 +520,35 @@ private fun DraggableQueueRow(
     index: Int,
     song: Song,
     isCurrent: Boolean,
+    isReorderActive: Boolean,
+    reorderOffsetY: Float,
     queueSize: Int,
     onClick: () -> Unit,
-    onMove: (Int, Int) -> Unit,
+    onReorderStart: () -> Unit,
+    onReorderDrag: (Float) -> Unit,
+    onReorderEnd: () -> Unit,
+    onReorderCancel: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    val rowHeightPx = with(density) { QueueRowHeight.toPx() }
     var swipeOffsetX by remember(song.id) { mutableStateOf(0f) }
-    var reorderOffsetY by remember(song.id) { mutableStateOf(0f) }
     val revealTrash = swipeOffsetX > TrashRevealDistancePx
-    val minReorderOffsetY = -index.toFloat() * rowHeightPx
-    val maxReorderOffsetY = (queueSize - 1 - index).toFloat() * rowHeightPx
+    val animatedReorderOffsetY by animateFloatAsState(
+        targetValue = reorderOffsetY,
+        label = "Queue row reorder offset",
+    )
+    val displayedReorderOffsetY = if (isReorderActive) {
+        reorderOffsetY
+    } else {
+        animatedReorderOffsetY
+    }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .zIndex(if (isReorderActive) 1f else 0f),
+    ) {
+        val density = LocalDensity.current
         val removeThresholdPx = with(density) { maxWidth.toPx() * 0.34f }
         val maxSwipeOffsetPx = with(density) { maxWidth.toPx() * 0.48f }
 
@@ -483,13 +580,13 @@ private fun DraggableQueueRow(
                 .offset {
                     IntOffset(
                         x = swipeOffsetX.roundToInt(),
-                        y = reorderOffsetY.roundToInt(),
+                        y = displayedReorderOffsetY.roundToInt(),
                     )
                 }
                 .pointerInput(index, queueSize, song.id) {
                     detectHorizontalDragGestures(
                         onDragStart = {
-                            reorderOffsetY = 0f
+                            onReorderCancel()
                         },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
@@ -563,25 +660,17 @@ private fun DraggableQueueRow(
                                 detectVerticalDragGestures(
                                     onDragStart = {
                                         swipeOffsetX = 0f
+                                        onReorderStart()
                                     },
                                     onVerticalDrag = { change, dragAmount ->
                                         change.consume()
-                                        reorderOffsetY = (reorderOffsetY + dragAmount)
-                                            .coerceIn(minReorderOffsetY, maxReorderOffsetY)
+                                        onReorderDrag(dragAmount)
                                     },
                                     onDragEnd = {
-                                        val targetIndex = (
-                                            index + (reorderOffsetY / rowHeightPx).roundToInt()
-                                        ).coerceIn(0, queueSize - 1)
-
-                                        reorderOffsetY = 0f
-
-                                        if (targetIndex != index) {
-                                            onMove(index, targetIndex)
-                                        }
+                                        onReorderEnd()
                                     },
                                     onDragCancel = {
-                                        reorderOffsetY = 0f
+                                        onReorderCancel()
                                     },
                                 )
                             },
@@ -599,6 +688,35 @@ private fun DraggableQueueRow(
     }
 }
 
+private data class QueueReorderDrag(
+    val songId: Long,
+    val fromIndex: Int,
+    val offsetY: Float,
+) {
+    fun targetIndex(
+        queueSize: Int,
+        rowHeightPx: Float,
+    ): Int = (fromIndex + (offsetY / rowHeightPx).roundToInt())
+        .coerceIn(0, queueSize - 1)
+}
+
+private fun queueRowReorderOffsetY(
+    index: Int,
+    songId: Long,
+    drag: QueueReorderDrag?,
+    targetIndex: Int?,
+    rowHeightPx: Float,
+): Float {
+    if (drag == null || targetIndex == null) return 0f
+    if (songId == drag.songId) return drag.offsetY
+
+    return when {
+        drag.fromIndex < targetIndex && index in (drag.fromIndex + 1)..targetIndex -> -rowHeightPx
+        drag.fromIndex > targetIndex && index in targetIndex until drag.fromIndex -> rowHeightPx
+        else -> 0f
+    }
+}
+
 private fun queueSummary(
     queueIndex: Int,
     queueSize: Int,
@@ -609,4 +727,5 @@ private fun queueSummary(
 }
 
 private val QueueRowHeight = 72.dp
+private val QueuePanelMaxHeight = 360.dp
 private const val TrashRevealDistancePx = 12f
