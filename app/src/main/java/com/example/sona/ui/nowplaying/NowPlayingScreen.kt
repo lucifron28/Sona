@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.sona.core.utils.formatDuration
 import com.example.sona.playback.PlaybackState
+import com.example.sona.ui.components.SonaDefaultAlbumArt
+import androidx.compose.foundation.layout.aspectRatio
 
 @Composable
 fun NowPlayingScreen(
@@ -63,6 +65,14 @@ fun NowPlayingScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        SonaDefaultAlbumArt(
+            isPlaying = playbackState.isPlaying,
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .aspectRatio(1f)
+                .padding(bottom = 32.dp),
+            spinLogoWithVinyl = true
+        )
         Text(
             text = currentSong.title,
             style = MaterialTheme.typography.headlineSmall,
