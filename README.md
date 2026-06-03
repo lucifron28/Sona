@@ -8,6 +8,12 @@
   A modern, elegant Android music player built with Kotlin, Jetpack Compose, and Media3.
 </p>
 
+## Download
+
+[Download the latest MVP APK from GitHub Releases](https://github.com/lucifron28/Sona/releases)
+
+Local release builds are generated at `app/build/outputs/apk/release/app-release-unsigned.apk`.
+
 ## Features
 
 * 🎵 **Local Library Management:** Seamlessly browse and manage your local audio files.
