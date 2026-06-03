@@ -3,7 +3,8 @@ package com.example.sona.ui.nowplaying
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Pause
@@ -49,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -61,7 +64,6 @@ import com.example.sona.domain.model.Song
 import com.example.sona.playback.PlaybackRepeatMode
 import com.example.sona.playback.PlaybackState
 import com.example.sona.ui.components.SonaDefaultAlbumArt
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -405,10 +407,11 @@ private fun ExpandableQueuePanel(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState())
                     .padding(top = 8.dp)
-                    .clip(MaterialTheme.shapes.small),
+                    .heightIn(max = 360.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clipToBounds()
+                    .verticalScroll(rememberScrollState()),
             ) {
                 queue.forEachIndexed { index, song ->
                     DraggableQueueRow(
@@ -442,13 +445,15 @@ private fun DraggableQueueRow(
 ) {
     val density = LocalDensity.current
     val rowHeightPx = with(density) { QueueRowHeight.toPx() }
-    var dragOffsetX by remember(song.id) { mutableStateOf(0f) }
-    var dragOffsetY by remember(song.id) { mutableStateOf(0f) }
-    val revealTrash = abs(dragOffsetX) > TrashRevealDistancePx
+    var swipeOffsetX by remember(song.id) { mutableStateOf(0f) }
+    var reorderOffsetY by remember(song.id) { mutableStateOf(0f) }
+    val revealTrash = swipeOffsetX > TrashRevealDistancePx
+    val minReorderOffsetY = -index.toFloat() * rowHeightPx
+    val maxReorderOffsetY = (queueSize - 1 - index).toFloat() * rowHeightPx
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val removeThresholdPx = with(density) { maxWidth.toPx() * 0.34f }
-        val trashAlignment = if (dragOffsetX >= 0f) Alignment.CenterStart else Alignment.CenterEnd
+        val maxSwipeOffsetPx = with(density) { maxWidth.toPx() * 0.48f }
 
         Box(
             modifier = Modifier
@@ -466,7 +471,7 @@ private fun DraggableQueueRow(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = null,
                     modifier = Modifier
-                        .align(trashAlignment)
+                        .align(Alignment.CenterStart)
                         .padding(horizontal = 24.dp),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -477,34 +482,30 @@ private fun DraggableQueueRow(
             modifier = Modifier
                 .offset {
                     IntOffset(
-                        x = dragOffsetX.roundToInt(),
-                        y = dragOffsetY.roundToInt(),
+                        x = swipeOffsetX.roundToInt(),
+                        y = reorderOffsetY.roundToInt(),
                     )
                 }
                 .pointerInput(index, queueSize, song.id) {
-                    detectDragGestures(
-                        onDrag = { change, dragAmount ->
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            reorderOffsetY = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            dragOffsetX += dragAmount.x
-                            dragOffsetY += dragAmount.y
+                            swipeOffsetX = (swipeOffsetX + dragAmount)
+                                .coerceIn(0f, maxSwipeOffsetPx)
                         },
                         onDragEnd = {
-                            val shouldRemove = abs(dragOffsetX) >= removeThresholdPx
-                            val targetIndex = (index + (dragOffsetY / rowHeightPx).roundToInt())
-                                .coerceIn(0, queueSize - 1)
-
-                            dragOffsetX = 0f
-                            dragOffsetY = 0f
+                            val shouldRemove = swipeOffsetX >= removeThresholdPx
+                            swipeOffsetX = 0f
 
                             if (shouldRemove) {
                                 onRemove()
-                            } else if (targetIndex != index) {
-                                onMove(index, targetIndex)
                             }
                         },
                         onDragCancel = {
-                            dragOffsetX = 0f
-                            dragOffsetY = 0f
+                            swipeOffsetX = 0f
                         },
                     )
                 }
@@ -544,11 +545,55 @@ private fun DraggableQueueRow(
                 )
             },
             trailingContent = {
-                Text(
-                    text = formatDuration(song.durationMs),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = formatDuration(song.durationMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .pointerInput(index, queueSize, song.id) {
+                                detectVerticalDragGestures(
+                                    onDragStart = {
+                                        swipeOffsetX = 0f
+                                    },
+                                    onVerticalDrag = { change, dragAmount ->
+                                        change.consume()
+                                        reorderOffsetY = (reorderOffsetY + dragAmount)
+                                            .coerceIn(minReorderOffsetY, maxReorderOffsetY)
+                                    },
+                                    onDragEnd = {
+                                        val targetIndex = (
+                                            index + (reorderOffsetY / rowHeightPx).roundToInt()
+                                        ).coerceIn(0, queueSize - 1)
+
+                                        reorderOffsetY = 0f
+
+                                        if (targetIndex != index) {
+                                            onMove(index, targetIndex)
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        reorderOffsetY = 0f
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DragHandle,
+                            contentDescription = "Drag to reorder",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             },
         )
     }
