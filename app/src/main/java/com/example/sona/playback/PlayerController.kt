@@ -1,14 +1,18 @@
 package com.example.sona.playback
 
+import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import com.example.sona.domain.model.Song
+import java.util.concurrent.ExecutionException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,26 +26,47 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PlayerController(context: Context) {
-    private val player = ExoPlayer.Builder(context.applicationContext).build()
+    private val applicationContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val pendingActions = ArrayDeque<(MediaController) -> Unit>()
+    private var mediaController: MediaController? = null
     private var queue: List<Song> = emptyList()
 
     private val _playbackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
-    init {
-        player.addListener(
-            object : Player.Listener {
-                override fun onEvents(player: Player, events: Player.Events) {
-                    syncState()
-                }
+    private val playerListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            syncState()
+        }
 
-                override fun onPlayerError(error: PlaybackException) {
-                    _playbackState.update {
-                        it.copy(errorMessage = error.message ?: "Playback failed.")
+        override fun onPlayerError(error: PlaybackException) {
+            _playbackState.update {
+                it.copy(errorMessage = error.message ?: "Playback failed.")
+            }
+        }
+    }
+
+    private val controllerFuture = MediaController.Builder(
+        applicationContext,
+        SessionToken(
+            applicationContext,
+            ComponentName(applicationContext, SonaPlaybackService::class.java),
+        ),
+    ).buildAsync()
+
+    init {
+        controllerFuture.addListener(
+            {
+                runCatchingControllerFuture()
+                    ?.also { controller ->
+                        mediaController = controller
+                        controller.addListener(playerListener)
+                        drainPendingActions(controller)
+                        syncState()
                     }
-                }
             },
+            ContextCompat.getMainExecutor(applicationContext),
         )
 
         scope.launch {
@@ -60,66 +85,117 @@ class PlayerController(context: Context) {
 
         this.queue = playbackQueue
         _playbackState.update { it.copy(errorMessage = null) }
-        player.setMediaItems(
-            playbackQueue.map { it.toMediaItem() },
-            startIndex,
-            C.TIME_UNSET,
-        )
-        player.prepare()
-        player.play()
-        syncState()
-    }
 
-    fun playPause() {
-        if (player.mediaItemCount == 0) return
-
-        if (player.isPlaying) {
-            player.pause()
-        } else {
-            player.play()
-        }
-        syncState()
-    }
-
-    fun seekTo(positionMs: Long) {
-        if (player.mediaItemCount == 0) return
-
-        player.seekTo(positionMs.coerceAtLeast(0L))
-        syncState()
-    }
-
-    fun skipNext() {
-        if (player.hasNextMediaItem()) {
-            player.seekToNextMediaItem()
-            player.play()
+        withController { controller ->
+            controller.setMediaItems(
+                playbackQueue.map { it.toMediaItem() },
+                startIndex,
+                C.TIME_UNSET,
+            )
+            controller.prepare()
+            controller.play()
             syncState()
         }
     }
 
-    fun skipPrevious() {
-        if (player.hasPreviousMediaItem()) {
-            player.seekToPreviousMediaItem()
-            player.play()
-        } else {
-            player.seekTo(0L)
+    fun playPause() {
+        withController { controller ->
+            if (controller.mediaItemCount == 0) return@withController
+
+            if (controller.isPlaying) {
+                controller.pause()
+            } else {
+                controller.play()
+            }
+            syncState()
         }
-        syncState()
+    }
+
+    fun seekTo(positionMs: Long) {
+        withController { controller ->
+            if (controller.mediaItemCount == 0) return@withController
+
+            controller.seekTo(positionMs.coerceAtLeast(0L))
+            syncState()
+        }
+    }
+
+    fun skipNext() {
+        withController { controller ->
+            if (controller.hasNextMediaItem()) {
+                controller.seekToNextMediaItem()
+                controller.play()
+                syncState()
+            }
+        }
+    }
+
+    fun skipPrevious() {
+        withController { controller ->
+            if (controller.hasPreviousMediaItem()) {
+                controller.seekToPreviousMediaItem()
+                controller.play()
+            } else {
+                controller.seekTo(0L)
+            }
+            syncState()
+        }
     }
 
     fun stop() {
-        player.stop()
-        syncState()
+        withController { controller ->
+            controller.stop()
+            syncState()
+        }
     }
 
     fun release() {
         scope.cancel()
-        player.release()
+        mediaController?.removeListener(playerListener)
+        mediaController?.release()
+        mediaController = null
+        pendingActions.clear()
+    }
+
+    private fun withController(action: (MediaController) -> Unit) {
+        val controller = mediaController
+        if (controller != null) {
+            action(controller)
+        } else {
+            pendingActions.addLast(action)
+        }
+    }
+
+    private fun drainPendingActions(controller: MediaController) {
+        while (pendingActions.isNotEmpty()) {
+            pendingActions.removeFirst()(controller)
+        }
+    }
+
+    private fun runCatchingControllerFuture(): MediaController? = try {
+        controllerFuture.get()
+    } catch (error: InterruptedException) {
+        Thread.currentThread().interrupt()
+        recordControllerConnectionError(error)
+        null
+    } catch (error: ExecutionException) {
+        recordControllerConnectionError(error)
+        null
+    }
+
+    private fun recordControllerConnectionError(error: Throwable) {
+        _playbackState.update {
+            it.copy(errorMessage = error.cause?.message ?: error.message ?: "Playback service unavailable.")
+        }
     }
 
     private fun syncState() {
-        val currentIndex = player.currentMediaItemIndex.takeIf { it >= 0 } ?: -1
+        val controller = mediaController ?: return
+        val currentIndex = controller.currentMediaItemIndex.takeIf {
+            controller.mediaItemCount > 0 && it >= 0
+        } ?: -1
         val currentSong = queue.getOrNull(currentIndex)
-        val playerDuration = player.duration
+        val playerDuration = controller.duration
         val durationMs = when {
             playerDuration != C.TIME_UNSET && playerDuration >= 0L -> playerDuration
             currentSong != null -> currentSong.durationMs
@@ -129,8 +205,8 @@ class PlayerController(context: Context) {
         _playbackState.update {
             it.copy(
                 currentSong = currentSong,
-                isPlaying = player.isPlaying,
-                positionMs = player.currentPosition.coerceAtLeast(0L),
+                isPlaying = controller.isPlaying,
+                positionMs = controller.currentPosition.coerceAtLeast(0L),
                 durationMs = durationMs,
                 queueIndex = currentIndex,
                 queueSize = queue.size,
