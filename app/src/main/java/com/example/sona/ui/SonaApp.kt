@@ -38,6 +38,8 @@ import com.example.sona.ui.navigation.SonaDestination
 import com.example.sona.ui.nowplaying.MiniPlayer
 import com.example.sona.ui.nowplaying.NowPlayingScreen
 import com.example.sona.ui.playlists.PlaylistsScreen
+import com.example.sona.ui.playlists.PlaylistsViewModel
+import com.example.sona.ui.playlists.PlaylistsViewModelFactory
 import com.example.sona.ui.settings.SettingsScreen
 import com.example.sona.ui.settings.SettingsViewModel
 import com.example.sona.ui.settings.SettingsViewModelFactory
@@ -62,6 +64,12 @@ fun SonaApp(
     }
     val settingsViewModelFactory = remember(appContainer) {
         SettingsViewModelFactory(appContainer.settingsRepository)
+    }
+    val playlistsViewModelFactory = remember(appContainer) {
+        PlaylistsViewModelFactory(
+            playlistRepository = appContainer.playlistRepository,
+            songRepository = appContainer.songRepository,
+        )
     }
     val currentSongId = playbackState.currentSong?.id
 
@@ -146,7 +154,26 @@ fun SonaApp(
                 )
             }
             composable(SonaDestination.Playlists.route) {
-                PlaylistsScreen(contentPadding = innerPadding)
+                val playlistsViewModel: PlaylistsViewModel = viewModel(
+                    factory = playlistsViewModelFactory,
+                )
+                val uiState by playlistsViewModel.uiState.collectAsStateWithLifecycle()
+
+                PlaylistsScreen(
+                    contentPadding = innerPadding,
+                    uiState = uiState,
+                    onNameChange = playlistsViewModel::setNewPlaylistName,
+                    onCreatePlaylist = playlistsViewModel::createPlaylist,
+                    onSelectPlaylist = playlistsViewModel::selectPlaylist,
+                    onBackToPlaylists = playlistsViewModel::clearSelectedPlaylist,
+                    onAddSong = playlistsViewModel::addSong,
+                    onRemoveSong = playlistsViewModel::removeSong,
+                    onPlaySongs = { songs ->
+                        songs.firstOrNull()?.let { firstSong ->
+                            appContainer.playerController.play(firstSong, songs)
+                        }
+                    },
+                )
             }
             composable(SonaDestination.Settings.route) {
                 val settingsViewModel: SettingsViewModel = viewModel(
