@@ -21,7 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import com.example.sona.playback.PlaybackState
+import com.example.sona.ui.components.SonaDefaultAlbumArt
 
 @Composable
 fun MiniPlayer(
@@ -57,6 +59,11 @@ fun MiniPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                SonaDefaultAlbumArt(
+                    isPlaying = playbackState.isPlaying,
+                    modifier = Modifier.size(48.dp),
+                    spinLogoWithVinyl = true
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = currentSong.title,
