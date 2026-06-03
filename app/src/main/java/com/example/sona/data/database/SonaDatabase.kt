@@ -88,10 +88,20 @@ abstract class SonaDatabase : RoomDatabase() {
             }
         }
 
-        fun create(context: Context): SonaDatabase = Room.databaseBuilder(
-            context.applicationContext,
-            SonaDatabase::class.java,
-            "sona.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        @Volatile
+        private var INSTANCE: SonaDatabase? = null
+
+        fun create(context: Context): SonaDatabase =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    SonaDatabase::class.java,
+                    "sona.db",
+                )
+                    .enableMultiInstanceInvalidation()
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .build()
+                    .also { INSTANCE = it }
+            }
     }
 }

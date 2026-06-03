@@ -37,7 +37,6 @@ class UrlImportWorker(
         val downloadItem = downloadRepository.getDownload(downloadId)
         if (downloadItem == null) {
             DownloadLogger.error(downloadId, "No download row found for worker")
-            database.close()
             return Result.failure()
         }
 
@@ -207,8 +206,6 @@ class UrlImportWorker(
                 errorMessage = errorMessage,
             )
             Result.failure()
-        } finally {
-            database.close()
         }
     }
 
