@@ -22,6 +22,7 @@ class UrlImportWorker(
 
     override suspend fun doWork(): Result {
         val downloadId = inputData.getLong(KEY_DOWNLOAD_ID, -1L)
+        var lastDownloaderLine: String? = null
         DownloadLogger.info(downloadId.takeIf { it > 0L }, "Worker started workId=$id attempt=$runAttemptCount")
         if (downloadId <= 0L) {
             DownloadLogger.error(null, "Worker missing download id")
@@ -85,17 +86,33 @@ class UrlImportWorker(
             }
 
             DownloadLogger.info(downloadId, "Starting yt-dlp execute processId=$processId")
-            YoutubeDL.getInstance().execute(request, processId, true) { progress, _, _ ->
-                val clampedProgress = progress.coerceIn(0f, 100f)
-                DownloadLogger.debug(downloadId, "Progress ${clampedProgress.toInt()}%")
+            var latestProgress = 0f
+            var lastPersistedPercent = -1
+            YoutubeDL.getInstance().execute(request, processId, true) { progress, _, line ->
+                val downloaderLine = line.cleanedDownloaderLine()
+                if (downloaderLine != null) {
+                    lastDownloaderLine = downloaderLine
+                    DownloadLogger.debug(downloadId, "yt-dlp: $downloaderLine")
+                }
+
+                if (progress >= 0f) {
+                    latestProgress = progress.coerceIn(0f, 100f)
+                }
+
+                val percent = latestProgress.toInt()
+                val shouldPersist = downloaderLine != null || percent != lastPersistedPercent
+                if (!shouldPersist) return@execute
+
+                lastPersistedPercent = percent
+                val diagnosticMessage = downloaderLine ?: "Downloading audio: $percent%"
                 runBlocking {
                     updateState(
                         repository = downloadRepository,
                         id = downloadId,
                         status = DownloadStatus.DOWNLOADING,
                         title = title,
-                        progress = clampedProgress,
-                        diagnosticMessage = "Downloading audio: ${clampedProgress.toInt()}%",
+                        progress = latestProgress,
+                        diagnosticMessage = diagnosticMessage,
                     )
                 }
             }
@@ -143,10 +160,11 @@ class UrlImportWorker(
             downloadRepository.markFailed(downloadId, "Import interrupted.")
             Result.failure()
         } catch (error: Throwable) {
-            DownloadLogger.error(downloadId, "Import failed", error)
+            val errorMessage = error.userVisibleMessage(lastDownloaderLine)
+            DownloadLogger.error(downloadId, "Import failed: $errorMessage", error)
             downloadRepository.markFailed(
                 id = downloadId,
-                errorMessage = error.message ?: "Import failed.",
+                errorMessage = errorMessage,
             )
             Result.failure()
         } finally {
@@ -164,6 +182,20 @@ class UrlImportWorker(
             addOption("--no-playlist")
         }
 
+    private fun String?.cleanedDownloaderLine(): String? =
+        this
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(MAX_DIAGNOSTIC_LENGTH)
+
+    private fun Throwable.userVisibleMessage(lastDownloaderLine: String?): String =
+        listOfNotNull(
+            message?.takeIf { it.isNotBlank() },
+            cause?.message?.takeIf { it.isNotBlank() },
+            lastDownloaderLine?.let { "Downloader stopped after: $it" },
+        ).firstOrNull() ?: "Downloader failed without a detailed message. Try Update, then retry."
+
     private suspend fun updateState(
         repository: DownloadRepository,
         id: Long,
@@ -179,5 +211,9 @@ class UrlImportWorker(
             progress = progress,
             diagnosticMessage = diagnosticMessage,
         )
+    }
+
+    private companion object {
+        const val MAX_DIAGNOSTIC_LENGTH = 180
     }
 }
