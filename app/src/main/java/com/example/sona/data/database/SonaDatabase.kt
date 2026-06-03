@@ -6,8 +6,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.sona.data.dao.DownloadDao
 import com.example.sona.data.dao.PlaylistDao
 import com.example.sona.data.dao.SongDao
+import com.example.sona.data.entities.DownloadItemEntity
 import com.example.sona.data.entities.PlaylistEntity
 import com.example.sona.data.entities.PlaylistSongCrossRef
 import com.example.sona.data.entities.SongEntity
@@ -17,13 +19,15 @@ import com.example.sona.data.entities.SongEntity
         SongEntity::class,
         PlaylistEntity::class,
         PlaylistSongCrossRef::class,
+        DownloadItemEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class SonaDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun downloadDao(): DownloadDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -55,10 +59,30 @@ abstract class SonaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS download_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        url TEXT NOT NULL,
+                        title TEXT,
+                        status TEXT NOT NULL,
+                        progress REAL NOT NULL,
+                        outputUri TEXT,
+                        errorMessage TEXT,
+                        createdAt INTEGER NOT NULL,
+                        completedAt INTEGER
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         fun create(context: Context): SonaDatabase = Room.databaseBuilder(
             context.applicationContext,
             SonaDatabase::class.java,
             "sona.db",
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }

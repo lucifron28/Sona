@@ -2,6 +2,7 @@ package com.example.sona.di
 
 import android.content.Context
 import com.example.sona.data.database.SonaDatabase
+import com.example.sona.data.repository.DownloadRepository
 import com.example.sona.data.repository.PlaylistRepository
 import com.example.sona.data.repository.SongRepository
 import com.example.sona.data.settings.SettingsRepository
@@ -21,6 +22,10 @@ class AppContainer(context: Context) {
 
     val playlistRepository: PlaylistRepository by lazy {
         PlaylistRepository(database.playlistDao())
+    }
+
+    val downloadRepository: DownloadRepository by lazy {
+        DownloadRepository(database.downloadDao())
     }
 
     val appMusicStorage: AppMusicStorage by lazy {
