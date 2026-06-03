@@ -32,6 +32,8 @@ import com.example.sona.ui.navigation.SonaDestination
 import com.example.sona.ui.nowplaying.NowPlayingScreen
 import com.example.sona.ui.playlists.PlaylistsScreen
 import com.example.sona.ui.settings.SettingsScreen
+import com.example.sona.ui.settings.SettingsViewModel
+import com.example.sona.ui.settings.SettingsViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +50,9 @@ fun SonaApp(
             songRepository = appContainer.songRepository,
             appMusicStorage = appContainer.appMusicStorage,
         )
+    }
+    val settingsViewModelFactory = remember(appContainer) {
+        SettingsViewModelFactory(appContainer.settingsRepository)
     }
 
     Scaffold(
@@ -132,7 +137,16 @@ fun SonaApp(
                 PlaylistsScreen(contentPadding = innerPadding)
             }
             composable(SonaDestination.Settings.route) {
-                SettingsScreen(contentPadding = innerPadding)
+                val settingsViewModel: SettingsViewModel = viewModel(
+                    factory = settingsViewModelFactory,
+                )
+                val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+
+                SettingsScreen(
+                    contentPadding = innerPadding,
+                    uiState = uiState,
+                    onThemeSelected = settingsViewModel::setThemePreference,
+                )
             }
         }
     }
