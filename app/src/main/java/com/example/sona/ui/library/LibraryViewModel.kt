@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.sona.data.repository.SongRepository
+import com.example.sona.domain.model.Song
 import com.example.sona.storage.AppMusicStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,10 +19,12 @@ class LibraryViewModel(
     private val appMusicStorage: AppMusicStorage,
 ) : ViewModel() {
     private val importState = MutableStateFlow(ImportState())
+    private val selectedFilter = MutableStateFlow(LibraryFilter.ALL)
 
-    val uiState = combine(songRepository.songs, importState) { songs, importState ->
+    val uiState = combine(songRepository.songs, importState, selectedFilter) { songs, importState, filter ->
         LibraryUiState(
-            songs = songs,
+            songs = filterSongsForLibrary(songs, filter),
+            selectedFilter = filter,
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
         )
@@ -53,6 +56,16 @@ class LibraryViewModel(
 
     fun clearError() {
         importState.update { it.copy(errorMessage = null) }
+    }
+
+    fun setFilter(filter: LibraryFilter) {
+        selectedFilter.value = filter
+    }
+
+    fun toggleFavorite(song: Song) {
+        viewModelScope.launch {
+            songRepository.setFavorite(song.id, !song.isFavorite)
+        }
     }
 }
 

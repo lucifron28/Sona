@@ -13,13 +13,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +46,8 @@ fun LibraryScreen(
     uiState: LibraryUiState,
     onImportAudio: (android.net.Uri) -> Unit,
     onSongClick: (Song) -> Unit,
+    onFilterSelected: (LibraryFilter) -> Unit,
+    onFavoriteClick: (Song) -> Unit,
     onClearError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -59,6 +67,10 @@ fun LibraryScreen(
             onImportClick = {
                 audioPickerLauncher.launch(arrayOf("audio/*"))
             },
+        )
+        LibraryFilters(
+            selectedFilter = uiState.selectedFilter,
+            onFilterSelected = onFilterSelected,
         )
 
         if (uiState.isImporting) {
@@ -86,10 +98,34 @@ fun LibraryScreen(
                     SongRow(
                         song = song,
                         onClick = { onSongClick(song) },
+                        onFavoriteClick = { onFavoriteClick(song) },
                     )
                     HorizontalDivider()
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryFilters(
+    selectedFilter: LibraryFilter,
+    onFilterSelected: (LibraryFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LibraryFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = filter == selectedFilter,
+                onClick = { onFilterSelected(filter) },
+                label = { Text(text = filter.label) },
+            )
         }
     }
 }
@@ -181,6 +217,7 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 private fun SongRow(
     song: Song,
     onClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
@@ -200,11 +237,35 @@ private fun SongRow(
             )
         },
         trailingContent = {
-            Text(
-                text = formatDuration(song.durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = formatDuration(song.durationMs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                IconButton(onClick = onFavoriteClick) {
+                    Icon(
+                        imageVector = if (song.isFavorite) {
+                            Icons.Filled.Favorite
+                        } else {
+                            Icons.Filled.FavoriteBorder
+                        },
+                        contentDescription = if (song.isFavorite) {
+                            "Remove favorite"
+                        } else {
+                            "Add favorite"
+                        },
+                        tint = if (song.isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
         },
     )
 }

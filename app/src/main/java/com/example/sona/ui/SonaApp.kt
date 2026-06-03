@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -53,6 +54,13 @@ fun SonaApp(
     }
     val settingsViewModelFactory = remember(appContainer) {
         SettingsViewModelFactory(appContainer.settingsRepository)
+    }
+    val currentSongId = playbackState.currentSong?.id
+
+    LaunchedEffect(currentSongId) {
+        currentSongId?.let { songId ->
+            appContainer.songRepository.recordPlayed(songId, System.currentTimeMillis())
+        }
     }
 
     Scaffold(
@@ -120,6 +128,8 @@ fun SonaApp(
                             launchSingleTop = true
                         }
                     },
+                    onFilterSelected = libraryViewModel::setFilter,
+                    onFavoriteClick = libraryViewModel::toggleFavorite,
                     onClearError = libraryViewModel::clearError,
                 )
             }
