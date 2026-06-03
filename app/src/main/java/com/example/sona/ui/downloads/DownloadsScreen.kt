@@ -23,10 +23,20 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.sona.domain.model.DownloadItem
@@ -40,12 +50,45 @@ fun DownloadsScreen(
     onImportClick: () -> Unit,
     onUpdateDownloader: () -> Unit,
     onDeleteDownload: (Long) -> Unit,
+    onSnackbarShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    var snackbarIsError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.snackbarEvent?.id) {
+        uiState.snackbarEvent?.let { event ->
+            snackbarIsError = event.isError
+            snackbarHostState.showSnackbar(event.message)
+            onSnackbarShown()
+        }
+    }
+
+    Scaffold(
+        modifier = modifier,
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (snackbarIsError) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        SuccessContainer
+                    },
+                    contentColor = if (snackbarIsError) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        Color.White
+                    },
+                )
+            }
+        },
+    ) { snackbarPadding ->
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(contentPadding)
+            .padding(snackbarPadding)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -118,6 +161,7 @@ fun DownloadsScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -152,10 +196,7 @@ private fun DownloadRow(
                     )
                 }
                 if (download.status.inProgress) {
-                    LinearProgressIndicator(
-                        progress = { (download.progress / 100f).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    DownloadProgress(download = download)
                 }
                 download.errorMessage?.let { errorMessage ->
                     Text(
@@ -177,6 +218,25 @@ private fun DownloadRow(
     )
 }
 
+@Composable
+private fun DownloadProgress(
+    download: DownloadItem,
+    modifier: Modifier = Modifier,
+) {
+    val determinate = download.status == DownloadStatus.DOWNLOADING ||
+        download.status == DownloadStatus.EXTRACTING ||
+        download.status == DownloadStatus.COMPLETED
+
+    if (determinate) {
+        LinearProgressIndicator(
+            progress = { (download.progress / 100f).coerceIn(0f, 1f) },
+            modifier = modifier.fillMaxWidth(),
+        )
+    } else {
+        LinearProgressIndicator(modifier = modifier.fillMaxWidth())
+    }
+}
+
 private val DownloadStatus.label: String
     get() = when (this) {
         DownloadStatus.QUEUED -> "Queued"
@@ -190,8 +250,15 @@ private val DownloadStatus.label: String
 
 private val DownloadItem.statusLine: String
     get() {
-        val workSuffix = workId?.take(8)?.let { " · work $it" } ?: ""
-        return status.label + workSuffix
+        val percent = when (status) {
+            DownloadStatus.DOWNLOADING,
+            DownloadStatus.EXTRACTING,
+            -> " ${progress.coerceIn(0f, 100f).toInt()}%"
+            DownloadStatus.COMPLETED -> " 100%"
+            else -> ""
+        }
+        val workSuffix = workId?.take(8)?.let { " - work $it" } ?: ""
+        return status.label + percent + workSuffix
     }
 
 private val DownloadStatus.inProgress: Boolean
@@ -206,3 +273,5 @@ private val DownloadStatus.inProgress: Boolean
         DownloadStatus.CANCELLED,
         -> false
     }
+
+private val SuccessContainer = Color(0xFF2E7D32)

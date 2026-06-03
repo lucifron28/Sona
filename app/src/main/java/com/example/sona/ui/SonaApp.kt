@@ -163,6 +163,11 @@ fun SonaApp(
                     },
                     onFilterSelected = libraryViewModel::setFilter,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
+                    onEditClick = libraryViewModel::startEditing,
+                    onEditTitleChange = libraryViewModel::updateEditTitle,
+                    onEditArtistChange = libraryViewModel::updateEditArtist,
+                    onSaveEdit = libraryViewModel::saveEditedTrack,
+                    onDismissEdit = libraryViewModel::dismissEditor,
                     onClearError = libraryViewModel::clearError,
                 )
             }
@@ -179,6 +184,7 @@ fun SonaApp(
                     onImportClick = downloadsViewModel::enqueueImport,
                     onUpdateDownloader = downloadsViewModel::updateDownloader,
                     onDeleteDownload = downloadsViewModel::deleteDownload,
+                    onSnackbarShown = downloadsViewModel::consumeSnackbar,
                 )
             }
             composable(SonaDestination.Playlists.route) {

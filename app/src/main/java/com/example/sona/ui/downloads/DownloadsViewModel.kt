@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.sona.data.repository.DownloadRepository
 import com.example.sona.downloader.UrlImportManager
+import com.example.sona.domain.model.DownloadStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -16,13 +18,37 @@ class DownloadsViewModel(
     private val urlImportManager: UrlImportManager,
 ) : ViewModel() {
     private val formState = MutableStateFlow(DownloadFormState())
+    private val snackbarEvent = MutableStateFlow<DownloadSnackbarEvent?>(null)
+    private val knownStatuses = mutableMapOf<Long, DownloadStatus>()
 
-    val uiState = combine(downloadRepository.downloads, formState) { downloads, form ->
+    init {
+        viewModelScope.launch {
+            downloadRepository.downloads
+                .onEach { downloads ->
+                    downloads.forEach { download ->
+                        val previousStatus = knownStatuses.put(download.id, download.status)
+                        if (
+                            previousStatus != null &&
+                            previousStatus != download.status &&
+                            download.status.isTerminal
+                        ) {
+                            snackbarEvent.value = download.toSnackbarEvent()
+                        }
+                    }
+                    val currentIds = downloads.mapTo(mutableSetOf()) { it.id }
+                    knownStatuses.keys.retainAll(currentIds)
+                }
+                .collect {}
+        }
+    }
+
+    val uiState = combine(downloadRepository.downloads, formState, snackbarEvent) { downloads, form, event ->
         DownloadsUiState(
             downloads = downloads,
             url = form.url,
             isUpdatingDownloader = form.isUpdatingDownloader,
             message = form.message,
+            snackbarEvent = event,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -81,6 +107,10 @@ class DownloadsViewModel(
             }
         }
     }
+
+    fun consumeSnackbar() {
+        snackbarEvent.value = null
+    }
 }
 
 private data class DownloadFormState(
@@ -88,6 +118,19 @@ private data class DownloadFormState(
     val isUpdatingDownloader: Boolean = false,
     val message: String? = null,
 )
+
+private val DownloadStatus.isTerminal: Boolean
+    get() = when (this) {
+        DownloadStatus.COMPLETED,
+        DownloadStatus.FAILED,
+        DownloadStatus.CANCELLED,
+        -> true
+        DownloadStatus.QUEUED,
+        DownloadStatus.FETCHING_METADATA,
+        DownloadStatus.DOWNLOADING,
+        DownloadStatus.EXTRACTING,
+        -> false
+    }
 
 class DownloadsViewModelFactory(
     private val downloadRepository: DownloadRepository,

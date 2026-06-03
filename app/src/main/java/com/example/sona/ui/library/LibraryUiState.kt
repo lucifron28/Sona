@@ -7,4 +7,12 @@ data class LibraryUiState(
     val selectedFilter: LibraryFilter = LibraryFilter.ALL,
     val isImporting: Boolean = false,
     val errorMessage: String? = null,
+    val editState: TrackEditState? = null,
+)
+
+data class TrackEditState(
+    val song: Song,
+    val title: String,
+    val artist: String,
+    val artistSuggestions: List<String>,
 )

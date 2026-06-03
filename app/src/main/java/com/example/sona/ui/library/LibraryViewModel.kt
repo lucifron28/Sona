@@ -20,13 +20,20 @@ class LibraryViewModel(
 ) : ViewModel() {
     private val importState = MutableStateFlow(ImportState())
     private val selectedFilter = MutableStateFlow(LibraryFilter.ALL)
+    private val editFormState = MutableStateFlow<EditFormState?>(null)
 
-    val uiState = combine(songRepository.songs, importState, selectedFilter) { songs, importState, filter ->
+    val uiState = combine(
+        songRepository.songs,
+        importState,
+        selectedFilter,
+        editFormState,
+    ) { songs, importState, filter, editForm ->
         LibraryUiState(
             songs = filterSongsForLibrary(songs, filter),
             selectedFilter = filter,
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
+            editState = editForm?.toTrackEditState(songs),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -67,12 +74,82 @@ class LibraryViewModel(
             songRepository.setFavorite(song.id, !song.isFavorite)
         }
     }
+
+    fun startEditing(song: Song) {
+        editFormState.value = EditFormState(
+            song = song,
+            title = song.title,
+            artist = song.artist,
+        )
+    }
+
+    fun updateEditTitle(title: String) {
+        editFormState.update { editForm ->
+            editForm?.copy(title = title)
+        }
+    }
+
+    fun updateEditArtist(artist: String) {
+        editFormState.update { editForm ->
+            editForm?.copy(artist = artist)
+        }
+    }
+
+    fun dismissEditor() {
+        editFormState.value = null
+    }
+
+    fun saveEditedTrack() {
+        val editForm = editFormState.value ?: return
+        val title = editForm.title.trim()
+        val artist = editForm.artist.trim()
+        if (title.isBlank() || artist.isBlank()) return
+
+        viewModelScope.launch {
+            songRepository.updateSong(
+                editForm.song.copy(
+                    title = title,
+                    artist = artist,
+                ),
+            )
+            editFormState.value = null
+        }
+    }
 }
 
 private data class ImportState(
     val isImporting: Boolean = false,
     val errorMessage: String? = null,
 )
+
+private data class EditFormState(
+    val song: Song,
+    val title: String,
+    val artist: String,
+) {
+    fun toTrackEditState(songs: List<Song>): TrackEditState {
+        val artistQuery = artist.trim()
+        val suggestions = songs
+            .asSequence()
+            .map { it.artist.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .filter { suggestion ->
+                suggestion.equals(artistQuery, ignoreCase = true).not() &&
+                    (artistQuery.isBlank() || suggestion.contains(artistQuery, ignoreCase = true))
+            }
+            .sorted()
+            .take(6)
+            .toList()
+
+        return TrackEditState(
+            song = song,
+            title = title,
+            artist = artist,
+            artistSuggestions = suggestions,
+        )
+    }
+}
 
 class LibraryViewModelFactory(
     private val songRepository: SongRepository,
