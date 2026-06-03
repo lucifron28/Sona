@@ -20,20 +20,43 @@ class LibraryViewModel(
 ) : ViewModel() {
     private val importState = MutableStateFlow(ImportState())
     private val selectedFilter = MutableStateFlow(LibraryFilter.ALL)
+    private val selectedView = MutableStateFlow(LibraryView.SONGS)
+    private val searchQuery = MutableStateFlow("")
     private val editFormState = MutableStateFlow<EditFormState?>(null)
+    private val libraryControls = combine(
+        selectedFilter,
+        selectedView,
+        searchQuery,
+        editFormState,
+    ) { filter, view, query, editForm ->
+        LibraryControlState(
+            filter = filter,
+            view = view,
+            query = query,
+            editForm = editForm,
+        )
+    }
 
     val uiState = combine(
         songRepository.songs,
         importState,
-        selectedFilter,
-        editFormState,
-    ) { songs, importState, filter, editForm ->
+        libraryControls,
+    ) { songs, importState, controls ->
+        val filteredSongs = searchSongsForLibrary(
+            songs = filterSongsForLibrary(songs, controls.filter),
+            query = controls.query,
+        )
+
         LibraryUiState(
-            songs = filterSongsForLibrary(songs, filter),
-            selectedFilter = filter,
+            songs = filteredSongs,
+            artistGroups = artistGroupsForLibrary(filteredSongs),
+            albumGroups = albumGroupsForLibrary(filteredSongs),
+            selectedFilter = controls.filter,
+            selectedView = controls.view,
+            searchQuery = controls.query,
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
-            editState = editForm?.toTrackEditState(songs),
+            editState = controls.editForm?.toTrackEditState(songs),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -67,6 +90,14 @@ class LibraryViewModel(
 
     fun setFilter(filter: LibraryFilter) {
         selectedFilter.value = filter
+    }
+
+    fun setView(view: LibraryView) {
+        selectedView.value = view
+    }
+
+    fun setSearchQuery(query: String) {
+        searchQuery.value = query
     }
 
     fun toggleFavorite(song: Song) {
@@ -120,6 +151,13 @@ class LibraryViewModel(
 private data class ImportState(
     val isImporting: Boolean = false,
     val errorMessage: String? = null,
+)
+
+private data class LibraryControlState(
+    val filter: LibraryFilter,
+    val view: LibraryView,
+    val query: String,
+    val editForm: EditFormState?,
 )
 
 private data class EditFormState(

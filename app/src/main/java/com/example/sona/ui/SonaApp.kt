@@ -158,10 +158,12 @@ fun SonaApp(
                     contentPadding = innerPadding,
                     uiState = uiState,
                     onImportAudio = libraryViewModel::importAudio,
-                    onSongClick = { song ->
-                        appContainer.playerController.play(song, uiState.songs)
+                    onSongClick = { song, queue ->
+                        appContainer.playerController.play(song, queue)
                     },
+                    onViewSelected = libraryViewModel::setView,
                     onFilterSelected = libraryViewModel::setFilter,
+                    onSearchQueryChange = libraryViewModel::setSearchQuery,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
                     onEditClick = libraryViewModel::startEditing,
                     onEditTitleChange = libraryViewModel::updateEditTitle,

@@ -19,9 +19,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -32,6 +34,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,8 +52,10 @@ fun LibraryScreen(
     contentPadding: PaddingValues,
     uiState: LibraryUiState,
     onImportAudio: (android.net.Uri) -> Unit,
-    onSongClick: (Song) -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onViewSelected: (LibraryView) -> Unit,
     onFilterSelected: (LibraryFilter) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
     onFavoriteClick: (Song) -> Unit,
     onEditClick: (Song) -> Unit,
     onEditTitleChange: (String) -> Unit,
@@ -76,6 +82,14 @@ fun LibraryScreen(
                 audioPickerLauncher.launch(arrayOf("audio/*"))
             },
         )
+        LibraryViewTabs(
+            selectedView = uiState.selectedView,
+            onViewSelected = onViewSelected,
+        )
+        LibrarySearchField(
+            query = uiState.searchQuery,
+            onQueryChange = onSearchQueryChange,
+        )
         LibraryFilters(
             selectedFilter = uiState.selectedFilter,
             onFilterSelected = onFilterSelected,
@@ -92,26 +106,16 @@ fun LibraryScreen(
             )
         }
 
-        if (uiState.songs.isEmpty()) {
+        if (uiState.isSelectedViewEmpty) {
             EmptyLibrary(modifier = Modifier.weight(1f))
         } else {
-            LazyColumn(
+            LibraryContent(
+                uiState = uiState,
+                onSongClick = onSongClick,
+                onFavoriteClick = onFavoriteClick,
+                onEditClick = onEditClick,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 16.dp),
-            ) {
-                items(
-                    items = uiState.songs,
-                    key = { song -> song.id },
-                ) { song ->
-                    SongRow(
-                        song = song,
-                        onClick = { onSongClick(song) },
-                        onFavoriteClick = { onFavoriteClick(song) },
-                        onEditClick = { onEditClick(song) },
-                    )
-                    HorizontalDivider()
-                }
-            }
+            )
         }
     }
 
@@ -124,6 +128,59 @@ fun LibraryScreen(
             onDismiss = onDismissEdit,
         )
     }
+}
+
+@Composable
+private fun LibraryViewTabs(
+    selectedView: LibraryView,
+    onViewSelected: (LibraryView) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PrimaryTabRow(
+        selectedTabIndex = LibraryView.entries.indexOf(selectedView),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        LibraryView.entries.forEach { view ->
+            Tab(
+                selected = view == selectedView,
+                onClick = { onViewSelected(view) },
+                text = { Text(text = view.label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        label = { Text(text = "Search library") },
+        singleLine = true,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+            )
+        },
+        trailingIcon = {
+            if (query.isNotBlank()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Clear search",
+                    )
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -233,6 +290,101 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun LibraryContent(
+    uiState: LibraryUiState,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onFavoriteClick: (Song) -> Unit,
+    onEditClick: (Song) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = 16.dp),
+    ) {
+        when (uiState.selectedView) {
+            LibraryView.SONGS -> {
+                items(
+                    items = uiState.songs,
+                    key = { song -> song.id },
+                ) { song ->
+                    SongRow(
+                        song = song,
+                        onClick = { onSongClick(song, uiState.songs) },
+                        onFavoriteClick = { onFavoriteClick(song) },
+                        onEditClick = { onEditClick(song) },
+                    )
+                    HorizontalDivider()
+                }
+            }
+            LibraryView.ARTISTS -> {
+                items(
+                    items = uiState.artistGroups,
+                    key = { group -> group.name.lowercase() },
+                ) { group ->
+                    LibraryGroupRow(
+                        group = group,
+                        onClick = {
+                            group.songs.firstOrNull()?.let { firstSong ->
+                                onSongClick(firstSong, group.songs)
+                            }
+                        },
+                    )
+                    HorizontalDivider()
+                }
+            }
+            LibraryView.ALBUMS -> {
+                items(
+                    items = uiState.albumGroups,
+                    key = { group -> group.name.lowercase() },
+                ) { group ->
+                    LibraryGroupRow(
+                        group = group,
+                        onClick = {
+                            group.songs.firstOrNull()?.let { firstSong ->
+                                onSongClick(firstSong, group.songs)
+                            }
+                        },
+                    )
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryGroupRow(
+    group: LibraryGroup,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ListItem(
+        modifier = modifier.clickable(onClick = onClick),
+        headlineContent = {
+            Text(
+                text = group.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
+            Text(
+                text = group.subtitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        trailingContent = {
+            Text(
+                text = formatDuration(group.songs.sumOf { it.durationMs }),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
+}
+
+@Composable
 private fun SongRow(
     song: Song,
     onClick: () -> Unit,
@@ -296,6 +448,13 @@ private fun SongRow(
         },
     )
 }
+
+private val LibraryUiState.isSelectedViewEmpty: Boolean
+    get() = when (selectedView) {
+        LibraryView.SONGS -> songs.isEmpty()
+        LibraryView.ARTISTS -> artistGroups.isEmpty()
+        LibraryView.ALBUMS -> albumGroups.isEmpty()
+    }
 
 @Composable
 private fun TrackEditDialog(
