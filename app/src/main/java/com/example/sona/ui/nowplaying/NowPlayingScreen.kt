@@ -1,24 +1,32 @@
 package com.example.sona.ui.nowplaying
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -29,9 +37,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.sona.core.utils.formatDuration
+import com.example.sona.domain.model.Song
+import com.example.sona.playback.PlaybackRepeatMode
 import com.example.sona.playback.PlaybackState
 import com.example.sona.ui.components.SonaDefaultAlbumArt
-import androidx.compose.foundation.layout.aspectRatio
 
 @Composable
 fun NowPlayingScreen(
@@ -41,6 +50,9 @@ fun NowPlayingScreen(
     onSeek: (Long) -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    onQueueSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (playbackState.currentSong == null) {
@@ -61,16 +73,17 @@ fun NowPlayingScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(contentPadding)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         SonaDefaultAlbumArt(
             isPlaying = playbackState.isPlaying,
             modifier = Modifier
-                .fillMaxWidth(0.8f)
+                .fillMaxWidth(0.72f)
                 .aspectRatio(1f)
-                .padding(bottom = 32.dp),
+                .padding(top = 8.dp),
             spinLogoWithVinyl = true
         )
         Text(
@@ -95,12 +108,17 @@ fun NowPlayingScreen(
             modifier = Modifier.padding(top = 8.dp),
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-
         PlaybackProgress(
             positionMs = positionMs,
             durationMs = durationMs,
             onSeek = onSeek,
+        )
+
+        PlaybackModeControls(
+            isShuffleEnabled = playbackState.isShuffleEnabled,
+            repeatMode = playbackState.repeatMode,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeatMode = onCycleRepeatMode,
         )
 
         PlaybackControls(
@@ -108,7 +126,13 @@ fun NowPlayingScreen(
             onPlayPause = onPlayPause,
             onSkipNext = onSkipNext,
             onSkipPrevious = onSkipPrevious,
-            modifier = Modifier.padding(top = 24.dp),
+        )
+
+        QueueList(
+            queue = playbackState.queue,
+            currentSongId = currentSong.id,
+            onQueueSongClick = onQueueSongClick,
+            modifier = Modifier.fillMaxWidth(),
         )
 
         playbackState.errorMessage?.let { errorMessage ->
@@ -206,6 +230,57 @@ private fun PlaybackProgress(
 }
 
 @Composable
+private fun PlaybackModeControls(
+    isShuffleEnabled: Boolean,
+    repeatMode: PlaybackRepeatMode,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeatMode: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onToggleShuffle) {
+            Icon(
+                imageVector = Icons.Filled.Shuffle,
+                contentDescription = if (isShuffleEnabled) {
+                    "Disable shuffle"
+                } else {
+                    "Enable shuffle"
+                },
+                tint = if (isShuffleEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+        IconButton(onClick = onCycleRepeatMode) {
+            Icon(
+                imageVector = when (repeatMode) {
+                    PlaybackRepeatMode.ONE -> Icons.Filled.RepeatOne
+                    PlaybackRepeatMode.OFF,
+                    PlaybackRepeatMode.ALL,
+                    -> Icons.Filled.Repeat
+                },
+                contentDescription = when (repeatMode) {
+                    PlaybackRepeatMode.OFF -> "Repeat off"
+                    PlaybackRepeatMode.ALL -> "Repeat all"
+                    PlaybackRepeatMode.ONE -> "Repeat one"
+                },
+                tint = if (repeatMode == PlaybackRepeatMode.OFF) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+        }
+    }
+}
+
+@Composable
 private fun PlaybackControls(
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
@@ -239,6 +314,87 @@ private fun PlaybackControls(
                 imageVector = Icons.Filled.SkipNext,
                 contentDescription = "Next",
             )
+        }
+    }
+}
+
+@Composable
+private fun QueueList(
+    queue: List<Song>,
+    currentSongId: Long,
+    onQueueSongClick: (Song) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (queue.isEmpty()) return
+
+    Column(modifier = modifier.padding(top = 8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Queue",
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+
+        queue.forEachIndexed { index, song ->
+            val isCurrent = song.id == currentSongId
+            ListItem(
+                modifier = Modifier.clickable { onQueueSongClick(song) },
+                leadingContent = {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        text = song.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = if (isCurrent) {
+                            "Now playing - ${song.artist}"
+                        } else {
+                            song.artist
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                trailingContent = {
+                    Text(
+                        text = formatDuration(song.durationMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+            )
+            if (index < queue.lastIndex) {
+                HorizontalDivider()
+            }
         }
     }
 }

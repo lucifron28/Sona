@@ -142,6 +142,23 @@ class PlayerController(context: Context) {
         }
     }
 
+    fun toggleShuffle() {
+        withController { controller ->
+            controller.shuffleModeEnabled = controller.shuffleModeEnabled.not()
+            syncState()
+        }
+    }
+
+    fun cycleRepeatMode() {
+        withController { controller ->
+            controller.repeatMode = controller.repeatMode
+                .toPlaybackRepeatMode()
+                .next()
+                .toPlayerRepeatMode()
+            syncState()
+        }
+    }
+
     fun stop() {
         withController { controller ->
             controller.stop()
@@ -205,7 +222,10 @@ class PlayerController(context: Context) {
         _playbackState.update {
             it.copy(
                 currentSong = currentSong,
+                queue = queue,
                 isPlaying = controller.isPlaying,
+                isShuffleEnabled = controller.shuffleModeEnabled,
+                repeatMode = controller.repeatMode.toPlaybackRepeatMode(),
                 positionMs = controller.currentPosition.coerceAtLeast(0L),
                 durationMs = durationMs,
                 queueIndex = currentIndex,
@@ -228,4 +248,16 @@ private fun Song.toMediaItem(): MediaItem {
         .setUri(Uri.parse(uri))
         .setMediaMetadata(metadataBuilder.build())
         .build()
+}
+
+private fun Int.toPlaybackRepeatMode(): PlaybackRepeatMode = when (this) {
+    Player.REPEAT_MODE_ALL -> PlaybackRepeatMode.ALL
+    Player.REPEAT_MODE_ONE -> PlaybackRepeatMode.ONE
+    else -> PlaybackRepeatMode.OFF
+}
+
+private fun PlaybackRepeatMode.toPlayerRepeatMode(): Int = when (this) {
+    PlaybackRepeatMode.OFF -> Player.REPEAT_MODE_OFF
+    PlaybackRepeatMode.ALL -> Player.REPEAT_MODE_ALL
+    PlaybackRepeatMode.ONE -> Player.REPEAT_MODE_ONE
 }
