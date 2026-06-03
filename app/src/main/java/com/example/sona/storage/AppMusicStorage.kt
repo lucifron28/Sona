@@ -32,6 +32,27 @@ class AppMusicStorage(
         )
     }
 
+    suspend fun registerDownloadedAudio(
+        file: File,
+        fallbackTitle: String?,
+        fallbackArtist: String?,
+        sourceUrl: String,
+    ): Song = withContext(Dispatchers.IO) {
+        val storedUri = Uri.fromFile(file)
+        val metadata = readAudioMetadata(storedUri)
+
+        Song(
+            title = metadata.title ?: fallbackTitle ?: file.name.titleWithoutExtension(),
+            artist = metadata.artist ?: fallbackArtist ?: "Unknown artist",
+            album = metadata.album,
+            durationMs = metadata.durationMs,
+            uri = storedUri.toString(),
+            dateAdded = now(),
+            sourceType = SourceType.IMPORTED_URL,
+            sourceUrl = sourceUrl,
+        )
+    }
+
     private fun copyIntoMusicStorage(sourceUri: Uri, displayName: String?): Uri {
         val musicDirectory = File(context.filesDir, "music").apply {
             mkdirs()
