@@ -13,15 +13,21 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.sona.di.AppContainer
 import com.example.sona.ui.library.LibraryScreen
+import com.example.sona.ui.library.LibraryViewModel
+import com.example.sona.ui.library.LibraryViewModelFactory
 import com.example.sona.ui.navigation.SonaDestination
 import com.example.sona.ui.nowplaying.NowPlayingScreen
 import com.example.sona.ui.playlists.PlaylistsScreen
@@ -29,10 +35,19 @@ import com.example.sona.ui.settings.SettingsScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SonaApp(modifier: Modifier = Modifier) {
+fun SonaApp(
+    appContainer: AppContainer,
+    modifier: Modifier = Modifier,
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val libraryViewModelFactory = remember(appContainer) {
+        LibraryViewModelFactory(
+            songRepository = appContainer.songRepository,
+            appMusicStorage = appContainer.appMusicStorage,
+        )
+    }
 
     Scaffold(
         modifier = modifier,
@@ -84,7 +99,18 @@ fun SonaApp(modifier: Modifier = Modifier) {
             modifier = Modifier,
         ) {
             composable(SonaDestination.Library.route) {
-                LibraryScreen(contentPadding = innerPadding)
+                val libraryViewModel: LibraryViewModel = viewModel(
+                    factory = libraryViewModelFactory,
+                )
+                val uiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
+
+                LibraryScreen(
+                    contentPadding = innerPadding,
+                    uiState = uiState,
+                    onImportAudio = libraryViewModel::importAudio,
+                    onSongClick = {},
+                    onClearError = libraryViewModel::clearError,
+                )
             }
             composable(SonaDestination.NowPlaying.route) {
                 NowPlayingScreen(contentPadding = innerPadding)

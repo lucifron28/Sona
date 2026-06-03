@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SonaTheme {
-                SonaApp()
+                SonaApp(appContainer = (application as SonaApplication).appContainer)
             }
         }
     }
