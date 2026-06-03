@@ -1,6 +1,8 @@
 package com.example.sona.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Download
@@ -23,7 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.example.sona.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -94,11 +98,10 @@ fun SonaApp(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
-                        text = currentDestination
-                            ?.route
-                            ?.let(NavDestinationLabel::get)
-                            ?: SonaDestination.Library.label,
+                    Image(
+                        painter = painterResource(id = R.drawable.sona_logo),
+                        contentDescription = "Sona",
+                        modifier = Modifier.height(36.dp),
                     )
                 },
             )
