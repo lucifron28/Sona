@@ -9,8 +9,10 @@ fun DownloadItemEntity.toDownloadItem(): DownloadItem = DownloadItem(
     title = title,
     status = status.toDownloadStatus(),
     progress = progress,
+    workId = workId,
     outputUri = outputUri,
     errorMessage = errorMessage,
+    diagnosticMessage = diagnosticMessage,
     createdAt = createdAt,
     completedAt = completedAt,
 )
@@ -21,8 +23,10 @@ fun DownloadItem.toEntity(): DownloadItemEntity = DownloadItemEntity(
     title = title,
     status = status.name,
     progress = progress,
+    workId = workId,
     outputUri = outputUri,
     errorMessage = errorMessage,
+    diagnosticMessage = diagnosticMessage,
     createdAt = createdAt,
     completedAt = completedAt,
 )

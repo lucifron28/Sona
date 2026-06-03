@@ -25,6 +25,7 @@ interface DownloadDao {
             progress = :progress,
             outputUri = :outputUri,
             errorMessage = :errorMessage,
+            diagnosticMessage = :diagnosticMessage,
             completedAt = :completedAt
         WHERE id = :id
         """,
@@ -36,7 +37,22 @@ interface DownloadDao {
         progress: Float,
         outputUri: String?,
         errorMessage: String?,
+        diagnosticMessage: String?,
         completedAt: Long?,
+    )
+
+    @Query(
+        """
+        UPDATE download_items
+        SET workId = :workId,
+            diagnosticMessage = :diagnosticMessage
+        WHERE id = :id
+        """,
+    )
+    suspend fun markWorkEnqueued(
+        id: Long,
+        workId: String,
+        diagnosticMessage: String,
     )
 
     @Query("DELETE FROM download_items WHERE id = :id")

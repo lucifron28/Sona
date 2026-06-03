@@ -22,9 +22,21 @@ class DownloadRepository(
         DownloadItemEntity(
             url = url,
             status = DownloadStatus.QUEUED.name,
+            diagnosticMessage = "Created download row. Waiting for WorkManager.",
             createdAt = now(),
         ),
     )
+
+    suspend fun markWorkEnqueued(
+        id: Long,
+        workId: String,
+    ) {
+        downloadDao.markWorkEnqueued(
+            id = id,
+            workId = workId,
+            diagnosticMessage = "Queued in WorkManager. workId=${workId.take(8)}",
+        )
+    }
 
     suspend fun updateState(
         id: Long,
@@ -33,6 +45,7 @@ class DownloadRepository(
         progress: Float = 0f,
         outputUri: String? = null,
         errorMessage: String? = null,
+        diagnosticMessage: String? = null,
         completedAt: Long? = null,
     ) {
         downloadDao.updateDownloadState(
@@ -42,6 +55,7 @@ class DownloadRepository(
             progress = progress,
             outputUri = outputUri,
             errorMessage = errorMessage,
+            diagnosticMessage = diagnosticMessage,
             completedAt = completedAt,
         )
     }
@@ -57,6 +71,7 @@ class DownloadRepository(
             title = title,
             progress = 100f,
             outputUri = outputUri,
+            diagnosticMessage = "Import complete. Added to library.",
             completedAt = now(),
         )
     }
@@ -66,6 +81,7 @@ class DownloadRepository(
             id = id,
             status = DownloadStatus.FAILED,
             errorMessage = errorMessage,
+            diagnosticMessage = "Import failed: $errorMessage",
         )
     }
 

@@ -22,33 +22,59 @@ class UrlImportWorker(
 
     override suspend fun doWork(): Result {
         val downloadId = inputData.getLong(KEY_DOWNLOAD_ID, -1L)
-        if (downloadId <= 0L) return Result.failure()
+        DownloadLogger.info(downloadId.takeIf { it > 0L }, "Worker started workId=$id attempt=$runAttemptCount")
+        if (downloadId <= 0L) {
+            DownloadLogger.error(null, "Worker missing download id")
+            return Result.failure()
+        }
 
         val database = SonaDatabase.create(applicationContext)
         val downloadRepository = DownloadRepository(database.downloadDao())
         val songRepository = SongRepository(database.songDao())
         val appMusicStorage = AppMusicStorage(applicationContext)
-        val downloadItem = downloadRepository.getDownload(downloadId) ?: return Result.failure()
+        val downloadItem = downloadRepository.getDownload(downloadId)
+        if (downloadItem == null) {
+            DownloadLogger.error(downloadId, "No download row found for worker")
+            database.close()
+            return Result.failure()
+        }
 
         return try {
-            downloadRepository.updateState(downloadId, DownloadStatus.FETCHING_METADATA)
+            updateState(
+                repository = downloadRepository,
+                id = downloadId,
+                status = DownloadStatus.FETCHING_METADATA,
+                diagnosticMessage = "Worker started. Initializing downloader.",
+            )
+            DownloadLogger.info(downloadId, "Initializing YoutubeDL and FFmpeg")
             YoutubeDL.getInstance().init(applicationContext)
             FFmpeg.getInstance().init(applicationContext)
 
+            updateState(
+                repository = downloadRepository,
+                id = downloadId,
+                status = DownloadStatus.FETCHING_METADATA,
+                diagnosticMessage = "Downloader initialized. Fetching metadata.",
+            )
+            DownloadLogger.info(downloadId, "Fetching metadata for ${downloadItem.url}")
             val videoInfo = YoutubeDL.getInstance().getInfo(singleVideoRequest(downloadItem.url))
             val title = videoInfo.title ?: videoInfo.fulltitle
             val artist = videoInfo.uploader
+            DownloadLogger.info(downloadId, "Metadata fetched title=${title ?: "unknown"} artist=${artist ?: "unknown"}")
 
-            downloadRepository.updateState(
+            updateState(
+                repository = downloadRepository,
                 id = downloadId,
                 status = DownloadStatus.DOWNLOADING,
                 title = title,
+                diagnosticMessage = "Metadata fetched. Preparing audio download.",
             )
 
             val outputDirectory = File(applicationContext.filesDir, "music").apply {
                 mkdirs()
             }
             val outputTemplate = File(outputDirectory, "sona-import-$downloadId.%(ext)s")
+            DownloadLogger.info(downloadId, "Output template=${outputTemplate.absolutePath}")
             val request = singleVideoRequest(downloadItem.url).apply {
                 addOption("--extract-audio")
                 addOption("--audio-format", "m4a")
@@ -58,26 +84,35 @@ class UrlImportWorker(
                 addOption("-o", outputTemplate.absolutePath)
             }
 
+            DownloadLogger.info(downloadId, "Starting yt-dlp execute processId=$processId")
             YoutubeDL.getInstance().execute(request, processId, true) { progress, _, _ ->
+                val clampedProgress = progress.coerceIn(0f, 100f)
+                DownloadLogger.debug(downloadId, "Progress ${clampedProgress.toInt()}%")
                 runBlocking {
-                    downloadRepository.updateState(
+                    updateState(
+                        repository = downloadRepository,
                         id = downloadId,
                         status = DownloadStatus.DOWNLOADING,
                         title = title,
-                        progress = progress.coerceIn(0f, 100f),
+                        progress = clampedProgress,
+                        diagnosticMessage = "Downloading audio: ${clampedProgress.toInt()}%",
                     )
                 }
             }
+            DownloadLogger.info(downloadId, "yt-dlp execute finished")
 
-            downloadRepository.updateState(
+            updateState(
+                repository = downloadRepository,
                 id = downloadId,
                 status = DownloadStatus.EXTRACTING,
                 title = title,
                 progress = 95f,
+                diagnosticMessage = "Download finished. Locating extracted audio.",
             )
 
             val outputFile = findOutputFile(outputDirectory, downloadId)
                 ?: error("Downloader finished but no audio output was found.")
+            DownloadLogger.info(downloadId, "Output file found=${outputFile.absolutePath}")
             val song = appMusicStorage.registerDownloadedAudio(
                 file = outputFile,
                 fallbackTitle = title,
@@ -85,6 +120,7 @@ class UrlImportWorker(
                 sourceUrl = downloadItem.url,
             )
             songRepository.addSong(song)
+            DownloadLogger.info(downloadId, "Song added to library title=${song.title}")
             downloadRepository.markCompleted(
                 id = downloadId,
                 title = song.title,
@@ -93,13 +129,21 @@ class UrlImportWorker(
 
             Result.success()
         } catch (error: YoutubeDL.CanceledException) {
-            downloadRepository.updateState(downloadId, DownloadStatus.CANCELLED)
+            DownloadLogger.error(downloadId, "Import cancelled", error)
+            updateState(
+                repository = downloadRepository,
+                id = downloadId,
+                status = DownloadStatus.CANCELLED,
+                diagnosticMessage = "Import cancelled.",
+            )
             Result.failure()
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
+            DownloadLogger.error(downloadId, "Import interrupted", error)
             downloadRepository.markFailed(downloadId, "Import interrupted.")
             Result.failure()
         } catch (error: Throwable) {
+            DownloadLogger.error(downloadId, "Import failed", error)
             downloadRepository.markFailed(
                 id = downloadId,
                 errorMessage = error.message ?: "Import failed.",
@@ -119,4 +163,21 @@ class UrlImportWorker(
         YoutubeDLRequest(url).apply {
             addOption("--no-playlist")
         }
+
+    private suspend fun updateState(
+        repository: DownloadRepository,
+        id: Long,
+        status: DownloadStatus,
+        title: String? = null,
+        progress: Float = 0f,
+        diagnosticMessage: String,
+    ) {
+        repository.updateState(
+            id = id,
+            status = status,
+            title = title,
+            progress = progress,
+            diagnosticMessage = diagnosticMessage,
+        )
+    }
 }

@@ -21,7 +21,7 @@ import com.example.sona.data.entities.SongEntity
         PlaylistSongCrossRef::class,
         DownloadItemEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class SonaDatabase : RoomDatabase() {
@@ -69,8 +69,10 @@ abstract class SonaDatabase : RoomDatabase() {
                         title TEXT,
                         status TEXT NOT NULL,
                         progress REAL NOT NULL,
+                        workId TEXT,
                         outputUri TEXT,
                         errorMessage TEXT,
+                        diagnosticMessage TEXT,
                         createdAt INTEGER NOT NULL,
                         completedAt INTEGER
                     )
@@ -79,10 +81,17 @@ abstract class SonaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_items ADD COLUMN workId TEXT")
+                db.execSQL("ALTER TABLE download_items ADD COLUMN diagnosticMessage TEXT")
+            }
+        }
+
         fun create(context: Context): SonaDatabase = Room.databaseBuilder(
             context.applicationContext,
             SonaDatabase::class.java,
             "sona.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 }

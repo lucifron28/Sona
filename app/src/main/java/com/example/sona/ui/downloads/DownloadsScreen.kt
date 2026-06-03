@@ -138,10 +138,19 @@ private fun DownloadRow(
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = download.status.label,
+                    text = download.statusLine,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                download.diagnosticMessage?.let { diagnosticMessage ->
+                    Text(
+                        text = diagnosticMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (download.status.inProgress) {
                     LinearProgressIndicator(
                         progress = { (download.progress / 100f).coerceIn(0f, 1f) },
@@ -177,6 +186,12 @@ private val DownloadStatus.label: String
         DownloadStatus.COMPLETED -> "Completed"
         DownloadStatus.FAILED -> "Failed"
         DownloadStatus.CANCELLED -> "Cancelled"
+    }
+
+private val DownloadItem.statusLine: String
+    get() {
+        val workSuffix = workId?.take(8)?.let { " · work $it" } ?: ""
+        return status.label + workSuffix
     }
 
 private val DownloadStatus.inProgress: Boolean
