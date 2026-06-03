@@ -1,23 +1,28 @@
 package com.example.sona.ui
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -30,6 +35,7 @@ import com.example.sona.ui.library.LibraryScreen
 import com.example.sona.ui.library.LibraryViewModel
 import com.example.sona.ui.library.LibraryViewModelFactory
 import com.example.sona.ui.navigation.SonaDestination
+import com.example.sona.ui.nowplaying.MiniPlayer
 import com.example.sona.ui.nowplaying.NowPlayingScreen
 import com.example.sona.ui.playlists.PlaylistsScreen
 import com.example.sona.ui.settings.SettingsScreen
@@ -46,6 +52,8 @@ fun SonaApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val playbackState by appContainer.playerController.playbackState.collectAsStateWithLifecycle()
+    var showNowPlayingSheet by remember { mutableStateOf(false) }
+    val nowPlayingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val libraryViewModelFactory = remember(appContainer) {
         LibraryViewModelFactory(
             songRepository = appContainer.songRepository,
@@ -78,31 +86,38 @@ fun SonaApp(
             )
         },
         bottomBar = {
-            NavigationBar {
-                sonaDestinations.forEach { destination ->
-                    val selected = currentDestination
-                        ?.hierarchy
-                        ?.any { it.route == destination.route } == true
+            androidx.compose.foundation.layout.Column {
+                MiniPlayer(
+                    playbackState = playbackState,
+                    onExpand = { showNowPlayingSheet = true },
+                    onPlayPause = appContainer.playerController::playPause,
+                )
+                NavigationBar {
+                    sonaDestinations.forEach { destination ->
+                        val selected = currentDestination
+                            ?.hierarchy
+                            ?.any { it.route == destination.route } == true
 
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = destination.label,
-                            )
-                        },
-                        label = { Text(text = destination.label) },
-                    )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = destination.label,
+                                )
+                            },
+                            label = { Text(text = destination.label) },
+                        )
+                    }
                 }
             }
         },
@@ -124,23 +139,10 @@ fun SonaApp(
                     onImportAudio = libraryViewModel::importAudio,
                     onSongClick = { song ->
                         appContainer.playerController.play(song, uiState.songs)
-                        navController.navigate(SonaDestination.NowPlaying.route) {
-                            launchSingleTop = true
-                        }
                     },
                     onFilterSelected = libraryViewModel::setFilter,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
                     onClearError = libraryViewModel::clearError,
-                )
-            }
-            composable(SonaDestination.NowPlaying.route) {
-                NowPlayingScreen(
-                    contentPadding = innerPadding,
-                    playbackState = playbackState,
-                    onPlayPause = appContainer.playerController::playPause,
-                    onSeek = appContainer.playerController::seekTo,
-                    onSkipNext = appContainer.playerController::skipNext,
-                    onSkipPrevious = appContainer.playerController::skipPrevious,
                 )
             }
             composable(SonaDestination.Playlists.route) {
@@ -160,26 +162,39 @@ fun SonaApp(
             }
         }
     }
+
+    if (showNowPlayingSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showNowPlayingSheet = false },
+            sheetState = nowPlayingSheetState,
+        ) {
+            NowPlayingScreen(
+                contentPadding = PaddingValues(bottom = 24.dp),
+                playbackState = playbackState,
+                onPlayPause = appContainer.playerController::playPause,
+                onSeek = appContainer.playerController::seekTo,
+                onSkipNext = appContainer.playerController::skipNext,
+                onSkipPrevious = appContainer.playerController::skipPrevious,
+            )
+        }
+    }
 }
 
 private val SonaDestination.icon: ImageVector
     get() = when (this) {
         SonaDestination.Library -> Icons.Filled.LibraryMusic
-        SonaDestination.NowPlaying -> Icons.Filled.MusicNote
         SonaDestination.Playlists -> Icons.AutoMirrored.Filled.QueueMusic
         SonaDestination.Settings -> Icons.Filled.Settings
     }
 
 private val NavDestinationLabel = mapOf(
     SonaDestination.Library.route to SonaDestination.Library.label,
-    SonaDestination.NowPlaying.route to SonaDestination.NowPlaying.label,
     SonaDestination.Playlists.route to SonaDestination.Playlists.label,
     SonaDestination.Settings.route to SonaDestination.Settings.label,
 )
 
 private val sonaDestinations = listOf(
     SonaDestination.Library,
-    SonaDestination.NowPlaying,
     SonaDestination.Playlists,
     SonaDestination.Settings,
 )

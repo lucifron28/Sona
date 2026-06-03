@@ -5,7 +5,6 @@ enum class SonaDestination(
     val label: String,
 ) {
     Library("library", "Library"),
-    NowPlaying("now_playing", "Now Playing"),
     Playlists("playlists", "Playlists"),
     Settings("settings", "Settings"),
 }
