@@ -2,7 +2,9 @@ package com.example.sona.ui.library
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -27,15 +30,17 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,8 +50,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.sona.core.utils.formatDuration
+import com.example.sona.domain.model.Playlist
 import com.example.sona.domain.model.Song
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     contentPadding: PaddingValues,
@@ -57,7 +64,10 @@ fun LibraryScreen(
     onFilterSelected: (LibraryFilter) -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onFavoriteClick: (Song) -> Unit,
-    onEditClick: (Song) -> Unit,
+    onSongLongClick: (Song) -> Unit,
+    onRenameFromActions: (Song) -> Unit,
+    onAddToPlaylist: (Playlist) -> Unit,
+    onDismissTrackActions: () -> Unit,
     onEditTitleChange: (String) -> Unit,
     onEditArtistChange: (String) -> Unit,
     onSaveEdit: () -> Unit,
@@ -112,8 +122,8 @@ fun LibraryScreen(
             LibraryContent(
                 uiState = uiState,
                 onSongClick = onSongClick,
+                onSongLongClick = onSongLongClick,
                 onFavoriteClick = onFavoriteClick,
-                onEditClick = onEditClick,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -126,6 +136,19 @@ fun LibraryScreen(
             onArtistChange = onEditArtistChange,
             onSave = onSaveEdit,
             onDismiss = onDismissEdit,
+        )
+    }
+
+    uiState.trackActionsState?.let { actionsState ->
+        TrackActionsSheet(
+            actionsState = actionsState,
+            onRename = onRenameFromActions,
+            onAddToPlaylist = onAddToPlaylist,
+            onToggleFavorite = { song ->
+                onFavoriteClick(song)
+                onDismissTrackActions()
+            },
+            onDismiss = onDismissTrackActions,
         )
     }
 }
@@ -293,8 +316,8 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 private fun LibraryContent(
     uiState: LibraryUiState,
     onSongClick: (Song, List<Song>) -> Unit,
+    onSongLongClick: (Song) -> Unit,
     onFavoriteClick: (Song) -> Unit,
-    onEditClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -310,8 +333,8 @@ private fun LibraryContent(
                     SongRow(
                         song = song,
                         onClick = { onSongClick(song, uiState.songs) },
+                        onLongClick = { onSongLongClick(song) },
                         onFavoriteClick = { onFavoriteClick(song) },
-                        onEditClick = { onEditClick(song) },
                     )
                     HorizontalDivider()
                 }
@@ -385,15 +408,19 @@ private fun LibraryGroupRow(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun SongRow(
     song: Song,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onFavoriteClick: () -> Unit,
-    onEditClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
         headlineContent = {
             Text(
                 text = song.title,
@@ -418,13 +445,6 @@ private fun SongRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                IconButton(onClick = onEditClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Edit,
-                        contentDescription = "Edit track details",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 IconButton(onClick = onFavoriteClick) {
                     Icon(
                         imageVector = if (song.isFavorite) {
@@ -455,6 +475,117 @@ private val LibraryUiState.isSelectedViewEmpty: Boolean
         LibraryView.ARTISTS -> artistGroups.isEmpty()
         LibraryView.ALBUMS -> albumGroups.isEmpty()
     }
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TrackActionsSheet(
+    actionsState: TrackActionsState,
+    onRename: (Song) -> Unit,
+    onAddToPlaylist: (Playlist) -> Unit,
+    onToggleFavorite: (Song) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = actionsState.song.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = actionsState.song.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            ActionSheetRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = null,
+                    )
+                },
+                label = "Rename",
+                onClick = { onRename(actionsState.song) },
+            )
+            ActionSheetRow(
+                icon = {
+                    Icon(
+                        imageVector = if (actionsState.song.isFavorite) {
+                            Icons.Filled.Favorite
+                        } else {
+                            Icons.Filled.FavoriteBorder
+                        },
+                        contentDescription = null,
+                    )
+                },
+                label = if (actionsState.song.isFavorite) {
+                    "Remove favorite"
+                } else {
+                    "Add favorite"
+                },
+                onClick = { onToggleFavorite(actionsState.song) },
+            )
+
+            Text(
+                text = "Add to playlist",
+                modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            if (actionsState.playlists.isEmpty()) {
+                Text(
+                    text = "No playlists yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                actionsState.playlists.forEach { playlist ->
+                    ActionSheetRow(
+                        icon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                                contentDescription = null,
+                            )
+                        },
+                        label = playlist.name,
+                        onClick = { onAddToPlaylist(playlist) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionSheetRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ListItem(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        leadingContent = icon,
+        headlineContent = {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
+}
 
 @Composable
 private fun TrackEditDialog(

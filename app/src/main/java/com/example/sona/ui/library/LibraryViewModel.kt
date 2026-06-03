@@ -4,7 +4,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.sona.data.repository.PlaylistRepository
 import com.example.sona.data.repository.SongRepository
+import com.example.sona.domain.model.Playlist
 import com.example.sona.domain.model.Song
 import com.example.sona.storage.AppMusicStorage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +18,7 @@ import kotlinx.coroutines.launch
 
 class LibraryViewModel(
     private val songRepository: SongRepository,
+    private val playlistRepository: PlaylistRepository,
     private val appMusicStorage: AppMusicStorage,
 ) : ViewModel() {
     private val importState = MutableStateFlow(ImportState())
@@ -23,6 +26,7 @@ class LibraryViewModel(
     private val selectedView = MutableStateFlow(LibraryView.SONGS)
     private val searchQuery = MutableStateFlow("")
     private val editFormState = MutableStateFlow<EditFormState?>(null)
+    private val trackActionsSong = MutableStateFlow<Song?>(null)
     private val libraryControls = combine(
         selectedFilter,
         selectedView,
@@ -39,13 +43,18 @@ class LibraryViewModel(
 
     val uiState = combine(
         songRepository.songs,
+        playlistRepository.playlists,
         importState,
         libraryControls,
-    ) { songs, importState, controls ->
+        trackActionsSong,
+    ) { songs, playlists, importState, controls, actionSong ->
         val filteredSongs = searchSongsForLibrary(
             songs = filterSongsForLibrary(songs, controls.filter),
             query = controls.query,
         )
+        val currentActionSong = actionSong?.let { selected ->
+            songs.firstOrNull { it.id == selected.id } ?: selected
+        }
 
         LibraryUiState(
             songs = filteredSongs,
@@ -57,6 +66,12 @@ class LibraryViewModel(
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
             editState = controls.editForm?.toTrackEditState(songs),
+            trackActionsState = currentActionSong?.let { song ->
+                TrackActionsState(
+                    song = song,
+                    playlists = playlists,
+                )
+            },
         )
     }.stateIn(
         scope = viewModelScope,
@@ -107,6 +122,7 @@ class LibraryViewModel(
     }
 
     fun startEditing(song: Song) {
+        trackActionsSong.value = null
         editFormState.value = EditFormState(
             song = song,
             title = song.title,
@@ -128,6 +144,27 @@ class LibraryViewModel(
 
     fun dismissEditor() {
         editFormState.value = null
+    }
+
+    fun showTrackActions(song: Song) {
+        trackActionsSong.value = song
+    }
+
+    fun dismissTrackActions() {
+        trackActionsSong.value = null
+    }
+
+    fun renameFromTrackActions(song: Song) {
+        trackActionsSong.value = null
+        startEditing(song)
+    }
+
+    fun addTrackActionSongToPlaylist(playlist: Playlist) {
+        val song = trackActionsSong.value ?: return
+        viewModelScope.launch {
+            playlistRepository.addSongToPlaylist(playlist.id, song.id)
+            trackActionsSong.value = null
+        }
     }
 
     fun saveEditedTrack() {
@@ -191,12 +228,13 @@ private data class EditFormState(
 
 class LibraryViewModelFactory(
     private val songRepository: SongRepository,
+    private val playlistRepository: PlaylistRepository,
     private val appMusicStorage: AppMusicStorage,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(LibraryViewModel::class.java)) {
-            return LibraryViewModel(songRepository, appMusicStorage) as T
+            return LibraryViewModel(songRepository, playlistRepository, appMusicStorage) as T
         }
         error("Unknown ViewModel class ${modelClass.name}")
     }

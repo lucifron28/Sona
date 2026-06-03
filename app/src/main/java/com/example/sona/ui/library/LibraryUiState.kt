@@ -1,6 +1,7 @@
 package com.example.sona.ui.library
 
 import com.example.sona.domain.model.Song
+import com.example.sona.domain.model.Playlist
 
 data class LibraryUiState(
     val songs: List<Song> = emptyList(),
@@ -12,6 +13,7 @@ data class LibraryUiState(
     val isImporting: Boolean = false,
     val errorMessage: String? = null,
     val editState: TrackEditState? = null,
+    val trackActionsState: TrackActionsState? = null,
 )
 
 data class LibraryGroup(
@@ -25,4 +27,9 @@ data class TrackEditState(
     val title: String,
     val artist: String,
     val artistSuggestions: List<String>,
+)
+
+data class TrackActionsState(
+    val song: Song,
+    val playlists: List<Playlist>,
 )

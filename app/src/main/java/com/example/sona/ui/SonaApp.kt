@@ -67,6 +67,7 @@ fun SonaApp(
     val libraryViewModelFactory = remember(appContainer) {
         LibraryViewModelFactory(
             songRepository = appContainer.songRepository,
+            playlistRepository = appContainer.playlistRepository,
             appMusicStorage = appContainer.appMusicStorage,
         )
     }
@@ -165,7 +166,10 @@ fun SonaApp(
                     onFilterSelected = libraryViewModel::setFilter,
                     onSearchQueryChange = libraryViewModel::setSearchQuery,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
-                    onEditClick = libraryViewModel::startEditing,
+                    onSongLongClick = libraryViewModel::showTrackActions,
+                    onRenameFromActions = libraryViewModel::renameFromTrackActions,
+                    onAddToPlaylist = libraryViewModel::addTrackActionSongToPlaylist,
+                    onDismissTrackActions = libraryViewModel::dismissTrackActions,
                     onEditTitleChange = libraryViewModel::updateEditTitle,
                     onEditArtistChange = libraryViewModel::updateEditArtist,
                     onSaveEdit = libraryViewModel::saveEditedTrack,
