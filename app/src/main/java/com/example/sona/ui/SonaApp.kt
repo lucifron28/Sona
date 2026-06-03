@@ -163,6 +163,11 @@ fun SonaApp(
                     },
                     onFilterSelected = libraryViewModel::setFilter,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
+                    onEditClick = libraryViewModel::startEditing,
+                    onEditTitleChange = libraryViewModel::updateEditTitle,
+                    onEditArtistChange = libraryViewModel::updateEditArtist,
+                    onSaveEdit = libraryViewModel::saveEditedTrack,
+                    onDismissEdit = libraryViewModel::dismissEditor,
                     onClearError = libraryViewModel::clearError,
                 )
             }

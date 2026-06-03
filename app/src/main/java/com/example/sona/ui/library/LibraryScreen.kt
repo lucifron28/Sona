@@ -19,8 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -29,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +51,11 @@ fun LibraryScreen(
     onSongClick: (Song) -> Unit,
     onFilterSelected: (LibraryFilter) -> Unit,
     onFavoriteClick: (Song) -> Unit,
+    onEditClick: (Song) -> Unit,
+    onEditTitleChange: (String) -> Unit,
+    onEditArtistChange: (String) -> Unit,
+    onSaveEdit: () -> Unit,
+    onDismissEdit: () -> Unit,
     onClearError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -99,11 +107,22 @@ fun LibraryScreen(
                         song = song,
                         onClick = { onSongClick(song) },
                         onFavoriteClick = { onFavoriteClick(song) },
+                        onEditClick = { onEditClick(song) },
                     )
                     HorizontalDivider()
                 }
             }
         }
+    }
+
+    uiState.editState?.let { editState ->
+        TrackEditDialog(
+            editState = editState,
+            onTitleChange = onEditTitleChange,
+            onArtistChange = onEditArtistChange,
+            onSave = onSaveEdit,
+            onDismiss = onDismissEdit,
+        )
     }
 }
 
@@ -218,6 +237,7 @@ private fun SongRow(
     song: Song,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    onEditClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
@@ -246,6 +266,13 @@ private fun SongRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                IconButton(onClick = onEditClick) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = "Edit track details",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = onFavoriteClick) {
                     Icon(
                         imageVector = if (song.isFavorite) {
@@ -265,6 +292,72 @@ private fun SongRow(
                         },
                     )
                 }
+            }
+        },
+    )
+}
+
+@Composable
+private fun TrackEditDialog(
+    editState: TrackEditState,
+    onTitleChange: (String) -> Unit,
+    onArtistChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Edit track") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = editState.title,
+                    onValueChange = onTitleChange,
+                    label = { Text(text = "Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = editState.artist,
+                    onValueChange = onArtistChange,
+                    label = { Text(text = "Artist") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (editState.artistSuggestions.isNotEmpty()) {
+                    Text(
+                        text = "Existing artists",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        editState.artistSuggestions.forEach { artist ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { onArtistChange(artist) },
+                                label = { Text(text = artist) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onSave,
+                enabled = editState.title.isNotBlank() && editState.artist.isNotBlank(),
+            ) {
+                Text(text = "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel")
             }
         },
     )
