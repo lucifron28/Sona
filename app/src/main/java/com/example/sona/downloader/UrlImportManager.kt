@@ -6,10 +6,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.example.sona.data.repository.DownloadRepository
-import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class UrlImportManager(
     context: Context,
@@ -38,18 +35,9 @@ class UrlImportManager(
         return downloadId
     }
 
-    suspend fun updateDownloader(): String = withContext(Dispatchers.IO) {
-        DownloadLogger.info(null, "Initializing downloader for manual update")
-        YoutubeDL.getInstance().init(applicationContext)
-        FFmpeg.getInstance().init(applicationContext)
-
-        DownloadLogger.info(null, "Updating downloader on stable channel")
-        val status = YoutubeDL.getInstance().updateYoutubeDL(
-            applicationContext,
-            YoutubeDL.UpdateChannel.STABLE,
-        )
-        val statusLabel = status?.name?.lowercase()?.replace('_', ' ') ?: "updated"
-        DownloadLogger.info(null, "Downloader update result=$statusLabel")
-        "Downloader $statusLabel"
-    }
+    suspend fun updateDownloader(): String = DownloaderUpdater.update(
+        context = applicationContext,
+        channel = YoutubeDL.UpdateChannel.STABLE,
+        reason = "manual update",
+    )
 }

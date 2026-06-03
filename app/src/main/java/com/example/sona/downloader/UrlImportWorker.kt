@@ -131,12 +131,12 @@ class UrlImportWorker(
                         progress = 0f,
                         diagnosticMessage = "YouTube returned 403. Updating downloader and retrying once.",
                     )
-                    val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
-                        applicationContext,
-                        YoutubeDL.UpdateChannel.MASTER,
+                    val updateMessage = DownloaderUpdater.update(
+                        context = applicationContext,
+                        channel = YoutubeDL.UpdateChannel.MASTER,
+                        reason = "YouTube 403 repair",
                     )
-                    val updateLabel = updateStatus?.name?.lowercase()?.replace('_', ' ') ?: "updated"
-                    DownloadLogger.info(downloadId, "yt-dlp master update result=$updateLabel")
+                    DownloadLogger.info(downloadId, "yt-dlp master update result=$updateMessage")
 
                     lastDownloaderLine = null
                     latestProgress = 0f
@@ -148,7 +148,7 @@ class UrlImportWorker(
                         status = DownloadStatus.DOWNLOADING,
                         title = title,
                         progress = 0f,
-                        diagnosticMessage = "Downloader $updateLabel. Retrying audio download.",
+                        diagnosticMessage = "$updateMessage. Retrying audio download.",
                     )
                 }
             }
