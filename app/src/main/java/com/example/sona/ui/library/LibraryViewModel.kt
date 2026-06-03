@@ -27,17 +27,20 @@ class LibraryViewModel(
     private val searchQuery = MutableStateFlow("")
     private val editFormState = MutableStateFlow<EditFormState?>(null)
     private val trackActionsSong = MutableStateFlow<Song?>(null)
+    private val selectedGroupKey = MutableStateFlow<LibraryGroupKey?>(null)
     private val libraryControls = combine(
         selectedFilter,
         selectedView,
         searchQuery,
         editFormState,
-    ) { filter, view, query, editForm ->
+        selectedGroupKey,
+    ) { filter, view, query, editForm, groupKey ->
         LibraryControlState(
             filter = filter,
             view = view,
             query = query,
             editForm = editForm,
+            groupKey = groupKey,
         )
     }
 
@@ -52,19 +55,38 @@ class LibraryViewModel(
             songs = filterSongsForLibrary(songs, controls.filter),
             query = controls.query,
         )
+        val artistGroups = artistGroupsForLibrary(filteredSongs)
+        val albumGroups = albumGroupsForLibrary(filteredSongs)
+        val selectedGroup = controls.groupKey
+            ?.takeIf { it.view == controls.view }
+            ?.let { key ->
+                val groups = when (key.view) {
+                    LibraryView.ARTISTS -> artistGroups
+                    LibraryView.ALBUMS -> albumGroups
+                    LibraryView.SONGS -> emptyList()
+                }
+                groups.firstOrNull { group -> group.name.equals(key.name, ignoreCase = true) }
+            }
+            ?.let { group ->
+                SelectedLibraryGroup(
+                    view = controls.view,
+                    group = group,
+                )
+            }
         val currentActionSong = actionSong?.let { selected ->
             songs.firstOrNull { it.id == selected.id } ?: selected
         }
 
         LibraryUiState(
             songs = filteredSongs,
-            artistGroups = artistGroupsForLibrary(filteredSongs),
-            albumGroups = albumGroupsForLibrary(filteredSongs),
+            artistGroups = artistGroups,
+            albumGroups = albumGroups,
             selectedFilter = controls.filter,
             selectedView = controls.view,
             searchQuery = controls.query,
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
+            selectedGroup = selectedGroup,
             editState = controls.editForm?.toTrackEditState(songs),
             trackActionsState = currentActionSong?.let { song ->
                 TrackActionsState(
@@ -105,14 +127,29 @@ class LibraryViewModel(
 
     fun setFilter(filter: LibraryFilter) {
         selectedFilter.value = filter
+        selectedGroupKey.value = null
     }
 
     fun setView(view: LibraryView) {
         selectedView.value = view
+        selectedGroupKey.value = null
     }
 
     fun setSearchQuery(query: String) {
         searchQuery.value = query
+        selectedGroupKey.value = null
+    }
+
+    fun selectGroup(view: LibraryView, group: LibraryGroup) {
+        if (view == LibraryView.SONGS) return
+        selectedGroupKey.value = LibraryGroupKey(
+            view = view,
+            name = group.name,
+        )
+    }
+
+    fun clearSelectedGroup() {
+        selectedGroupKey.value = null
     }
 
     fun toggleFavorite(song: Song) {
@@ -195,6 +232,12 @@ private data class LibraryControlState(
     val view: LibraryView,
     val query: String,
     val editForm: EditFormState?,
+    val groupKey: LibraryGroupKey?,
+)
+
+private data class LibraryGroupKey(
+    val view: LibraryView,
+    val name: String,
 )
 
 private data class EditFormState(

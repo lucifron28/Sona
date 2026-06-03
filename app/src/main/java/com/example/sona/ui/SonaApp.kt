@@ -165,6 +165,8 @@ fun SonaApp(
                     onViewSelected = libraryViewModel::setView,
                     onFilterSelected = libraryViewModel::setFilter,
                     onSearchQueryChange = libraryViewModel::setSearchQuery,
+                    onGroupClick = libraryViewModel::selectGroup,
+                    onBackFromGroup = libraryViewModel::clearSelectedGroup,
                     onFavoriteClick = libraryViewModel::toggleFavorite,
                     onSongLongClick = libraryViewModel::showTrackActions,
                     onRenameFromActions = libraryViewModel::renameFromTrackActions,

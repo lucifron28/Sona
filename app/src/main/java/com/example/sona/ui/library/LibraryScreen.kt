@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -63,6 +64,8 @@ fun LibraryScreen(
     onViewSelected: (LibraryView) -> Unit,
     onFilterSelected: (LibraryFilter) -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onGroupClick: (LibraryView, LibraryGroup) -> Unit,
+    onBackFromGroup: () -> Unit,
     onFavoriteClick: (Song) -> Unit,
     onSongLongClick: (Song) -> Unit,
     onRenameFromActions: (Song) -> Unit,
@@ -116,16 +119,31 @@ fun LibraryScreen(
             )
         }
 
-        if (uiState.isSelectedViewEmpty) {
-            EmptyLibrary(modifier = Modifier.weight(1f))
-        } else {
-            LibraryContent(
-                uiState = uiState,
-                onSongClick = onSongClick,
-                onSongLongClick = onSongLongClick,
-                onFavoriteClick = onFavoriteClick,
-                modifier = Modifier.weight(1f),
-            )
+        val selectedGroup = uiState.selectedGroup
+        when {
+            selectedGroup != null -> {
+                LibraryGroupDetail(
+                    selectedGroup = selectedGroup,
+                    onBack = onBackFromGroup,
+                    onSongClick = onSongClick,
+                    onSongLongClick = onSongLongClick,
+                    onFavoriteClick = onFavoriteClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            uiState.isSelectedViewEmpty -> {
+                EmptyLibrary(modifier = Modifier.weight(1f))
+            }
+            else -> {
+                LibraryContent(
+                    uiState = uiState,
+                    onSongClick = onSongClick,
+                    onGroupClick = onGroupClick,
+                    onSongLongClick = onSongLongClick,
+                    onFavoriteClick = onFavoriteClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 
@@ -316,6 +334,7 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 private fun LibraryContent(
     uiState: LibraryUiState,
     onSongClick: (Song, List<Song>) -> Unit,
+    onGroupClick: (LibraryView, LibraryGroup) -> Unit,
     onSongLongClick: (Song) -> Unit,
     onFavoriteClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
@@ -346,11 +365,7 @@ private fun LibraryContent(
                 ) { group ->
                     LibraryGroupRow(
                         group = group,
-                        onClick = {
-                            group.songs.firstOrNull()?.let { firstSong ->
-                                onSongClick(firstSong, group.songs)
-                            }
-                        },
+                        onClick = { onGroupClick(LibraryView.ARTISTS, group) },
                     )
                     HorizontalDivider()
                 }
@@ -362,14 +377,72 @@ private fun LibraryContent(
                 ) { group ->
                     LibraryGroupRow(
                         group = group,
-                        onClick = {
-                            group.songs.firstOrNull()?.let { firstSong ->
-                                onSongClick(firstSong, group.songs)
-                            }
-                        },
+                        onClick = { onGroupClick(LibraryView.ALBUMS, group) },
                     )
                     HorizontalDivider()
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryGroupDetail(
+    selectedGroup: SelectedLibraryGroup,
+    onBack: () -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onSongLongClick: (Song) -> Unit,
+    onFavoriteClick: (Song) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val group = selectedGroup.group
+    val songs = group.songs
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to ${selectedGroup.view.label}",
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = group.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${group.subtitle} - ${formatDuration(songs.sumOf { it.durationMs })}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 16.dp),
+        ) {
+            items(
+                items = songs,
+                key = { song -> song.id },
+            ) { song ->
+                SongRow(
+                    song = song,
+                    onClick = { onSongClick(song, songs) },
+                    onLongClick = { onSongLongClick(song) },
+                    onFavoriteClick = { onFavoriteClick(song) },
+                )
+                HorizontalDivider()
             }
         }
     }

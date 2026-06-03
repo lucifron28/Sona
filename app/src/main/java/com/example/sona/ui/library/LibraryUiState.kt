@@ -12,6 +12,7 @@ data class LibraryUiState(
     val searchQuery: String = "",
     val isImporting: Boolean = false,
     val errorMessage: String? = null,
+    val selectedGroup: SelectedLibraryGroup? = null,
     val editState: TrackEditState? = null,
     val trackActionsState: TrackActionsState? = null,
 )
@@ -20,6 +21,11 @@ data class LibraryGroup(
     val name: String,
     val subtitle: String,
     val songs: List<Song>,
+)
+
+data class SelectedLibraryGroup(
+    val view: LibraryView,
+    val group: LibraryGroup,
 )
 
 data class TrackEditState(
