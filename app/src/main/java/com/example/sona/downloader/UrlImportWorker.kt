@@ -35,7 +35,7 @@ class UrlImportWorker(
             YoutubeDL.getInstance().init(applicationContext)
             FFmpeg.getInstance().init(applicationContext)
 
-            val videoInfo = YoutubeDL.getInstance().getInfo(downloadItem.url)
+            val videoInfo = YoutubeDL.getInstance().getInfo(singleVideoRequest(downloadItem.url))
             val title = videoInfo.title ?: videoInfo.fulltitle
             val artist = videoInfo.uploader
 
@@ -49,8 +49,7 @@ class UrlImportWorker(
                 mkdirs()
             }
             val outputTemplate = File(outputDirectory, "sona-import-$downloadId.%(ext)s")
-            val request = YoutubeDLRequest(downloadItem.url).apply {
-                addOption("--no-playlist")
+            val request = singleVideoRequest(downloadItem.url).apply {
                 addOption("--extract-audio")
                 addOption("--audio-format", "m4a")
                 addOption("--audio-quality", "0")
@@ -115,4 +114,9 @@ class UrlImportWorker(
         outputDirectory
             .listFiles { file -> file.isFile && file.name.startsWith("sona-import-$downloadId.") }
             ?.maxByOrNull { it.lastModified() }
+
+    private fun singleVideoRequest(url: String): YoutubeDLRequest =
+        YoutubeDLRequest(url).apply {
+            addOption("--no-playlist")
+        }
 }
