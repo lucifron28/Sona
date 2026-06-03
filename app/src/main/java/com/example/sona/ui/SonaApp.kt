@@ -42,6 +42,7 @@ fun SonaApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val playbackState by appContainer.playerController.playbackState.collectAsStateWithLifecycle()
     val libraryViewModelFactory = remember(appContainer) {
         LibraryViewModelFactory(
             songRepository = appContainer.songRepository,
@@ -108,12 +109,24 @@ fun SonaApp(
                     contentPadding = innerPadding,
                     uiState = uiState,
                     onImportAudio = libraryViewModel::importAudio,
-                    onSongClick = {},
+                    onSongClick = { song ->
+                        appContainer.playerController.play(song, uiState.songs)
+                        navController.navigate(SonaDestination.NowPlaying.route) {
+                            launchSingleTop = true
+                        }
+                    },
                     onClearError = libraryViewModel::clearError,
                 )
             }
             composable(SonaDestination.NowPlaying.route) {
-                NowPlayingScreen(contentPadding = innerPadding)
+                NowPlayingScreen(
+                    contentPadding = innerPadding,
+                    playbackState = playbackState,
+                    onPlayPause = appContainer.playerController::playPause,
+                    onSeek = appContainer.playerController::seekTo,
+                    onSkipNext = appContainer.playerController::skipNext,
+                    onSkipPrevious = appContainer.playerController::skipPrevious,
+                )
             }
             composable(SonaDestination.Playlists.route) {
                 PlaylistsScreen(contentPadding = innerPadding)
