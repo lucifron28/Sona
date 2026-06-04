@@ -12,7 +12,10 @@
 
 [Download the latest MVP APK from GitHub Releases](https://github.com/lucifron28/Sona/releases)
 
-Local release builds are generated at `app/build/outputs/apk/release/app-release-unsigned.apk`.
+Signed local release builds are generated at `app/build/outputs/apk/release/app-release.apk`.
+
+Release signing reads credentials from an ignored root-level `keystore.properties` file. Use
+`keystore.properties.example` as the template and keep the keystore backed up for future updates.
 
 ## Features
 
