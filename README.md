@@ -1,53 +1,138 @@
 <p align="center">
-  <img src="app/src/main/res/drawable/sona_logo.png" width="128" height="128" alt="Sona Logo">
+  <img src="app/src/main/res/drawable/sona_logo.png" width="128" height="128" alt="Sona logo">
 </p>
 
 <h1 align="center">Sona</h1>
 
 <p align="center">
-  A modern, elegant Android music player built with Kotlin, Jetpack Compose, and Media3.
+  A modern Android music player built with Kotlin, Jetpack Compose, Media3, Room, and yt-dlp powered audio imports.
+</p>
+
+<p align="center">
+  <a href="https://github.com/lucifron28/Sona/releases/latest">Download APK</a>
+  |
+  <a href="#features">Features</a>
+  |
+  <a href="#roadmap">Roadmap</a>
+  |
+  <a href="#build-from-source">Build</a>
+</p>
+
+<p align="center">
+  <img alt="Android" src="https://img.shields.io/badge/Android-24%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue">
 </p>
 
 ## Download
 
-[Download the latest MVP APK from GitHub Releases](https://github.com/lucifron28/Sona/releases)
+The latest signed MVP build is available from GitHub Releases:
 
-Signed local release builds are generated at `app/build/outputs/apk/release/app-release.apk`.
+[Download Sona v0.1.2](https://github.com/lucifron28/Sona/releases/tag/v0.1.2)
 
-Release signing reads credentials from an ignored root-level `keystore.properties` file. Use
-`keystore.properties.example` as the template and keep the keystore backed up for future updates.
+Android may ask you to allow installs from your browser or file manager because this is a sideloaded APK.
+
+## Why Sona
+
+Sona is a focused local-first music player for Android. It combines a clean Compose interface, reliable Media3 playback, local library management, and direct URL audio imports into one lightweight MVP.
+
+The project is still early, but the core flow is usable: import or download a track, edit metadata, organize playback, and listen through a Spotify-style mini player and expanded now-playing view.
 
 ## Features
 
-* 🎵 **Local Library Management:** Seamlessly browse and manage your local audio files.
-* 🎧 **Modern Playback Engine:** Powered by AndroidX Media3 (ExoPlayer) for stable, gapless, and background audio playback.
-* 📥 **Audio Downloader:** Integrated with `youtube-dl` to easily download and import audio from URLs directly into your library.
-* 🎨 **Dynamic UI & Theming:** 
-  * Fully built with Jetpack Compose.
-  * Material 3 Dynamic Colors support.
-  * Light, Dark, and custom 'Dracula' themes.
-  * Custom rotating vinyl record animations for tracks without album art.
-* 📂 **Playlists:** Create and manage custom playlists.
-* 📱 **Mini & Expanded Player:** Fluid transitions between a persistent mini-player and a fully featured now-playing screen.
+- Local audio import through the Android file picker without broad storage permissions.
+- Room-backed library persistence for songs, metadata, playlists, and download records.
+- Media3 ExoPlayer playback with queue, shuffle, repeat, seek, next, and previous controls.
+- Spotify-inspired mini player that expands into a full now-playing screen.
+- Searchable library with Songs, Artists, and Albums views.
+- Artist and album drill-down views that open like folders before playback.
+- Long-press track actions for rename, favorite, and playlist actions.
+- Editable track name and artist, including existing artist suggestions.
+- URL audio import powered by youtubedl-android and yt-dlp.
+- Faster YouTube imports by avoiding duplicate metadata extraction.
+- Download progress, diagnostics, success and failure snackbar feedback.
+- Light, dark, system, and Dracula theme options.
+- Signed release APK builds for direct Android installation.
+
+## Screenshots
+
+Screenshots and a short demo GIF are planned for the next README pass. Recommended shots:
+
+- Library with Songs, Artists, and Albums.
+- URL download screen with progress.
+- Mini player and expanded now-playing screen.
+- Queue reorder and swipe-to-delete interaction.
+- Dracula theme.
 
 ## Tech Stack
 
-* **Language:** [Kotlin](https://kotlinlang.org/)
-* **UI Toolkit:** [Jetpack Compose](https://developer.android.com/jetpack/compose)
-* **Media Playback:** [AndroidX Media3](https://developer.android.com/guide/topics/media/media3)
-* **Local Database:** [Room](https://developer.android.com/training/data-storage/room)
-* **Navigation:** Compose Navigation
-* **Audio Downloading:** [youtubedl-android](https://github.com/yausername/youtubedl-android)
+- Kotlin
+- Jetpack Compose
+- Material 3
+- AndroidX Media3 and ExoPlayer
+- Room
+- WorkManager
+- Navigation Compose
+- youtubedl-android and yt-dlp
 
-## Getting Started
+## Build From Source
 
-### Prerequisites
-* Android Studio (latest stable or preview version recommended)
-* JDK 17+
-* Android SDK API Level 36 (Android 15+)
+### Requirements
 
-### Build & Run
-1. Clone the repository.
-2. Open the project in Android Studio.
-3. Sync the project with Gradle files.
-4. Run the `app` configuration on an emulator or physical device.
+- Android Studio
+- JDK 17 or newer
+- Android SDK API 36
+
+### Debug Build
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+```
+
+### Unit Tests
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+```
+
+### Signed Release Build
+
+Release signing uses an ignored root-level `keystore.properties` file.
+
+1. Copy `keystore.properties.example` to `keystore.properties`.
+2. Point `storeFile` to your release keystore.
+3. Fill in the store and key passwords.
+4. Build the release APK:
+
+```powershell
+.\gradlew.bat :app:assembleRelease
+```
+
+Signed local release builds are generated at:
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+Keep your release keystore backed up. Android updates must be signed with the same key.
+
+## Roadmap
+
+- Background playback service and notification controls.
+- MediaStore scanning for local device music.
+- Album artwork extraction and editing.
+- Lyrics support.
+- Equalizer and audio effects.
+- Smarter playlist management.
+- Download queue controls and cancellation.
+- Better first-run onboarding.
+- Screenshots and demo video in the README.
+
+## Contributing
+
+Feedback, bug reports, and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the preferred workflow.
+
+## License
+
+Sona is licensed under the [Apache License 2.0](LICENSE).
