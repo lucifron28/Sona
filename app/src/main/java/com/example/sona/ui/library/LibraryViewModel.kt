@@ -27,6 +27,7 @@ class LibraryViewModel(
     private val searchQuery = MutableStateFlow("")
     private val editFormState = MutableStateFlow<EditFormState?>(null)
     private val trackActionsSong = MutableStateFlow<Song?>(null)
+    private val deleteConfirmationSong = MutableStateFlow<Song?>(null)
     private val selectedGroupKey = MutableStateFlow<LibraryGroupKey?>(null)
     private val libraryControls = combine(
         selectedFilter,
@@ -43,14 +44,23 @@ class LibraryViewModel(
             groupKey = groupKey,
         )
     }
+    private val libraryActions = combine(
+        trackActionsSong,
+        deleteConfirmationSong,
+    ) { actionSong, deleteSong ->
+        LibraryActionState(
+            actionSong = actionSong,
+            deleteSong = deleteSong,
+        )
+    }
 
     val uiState = combine(
         songRepository.songs,
         playlistRepository.playlists,
         importState,
         libraryControls,
-        trackActionsSong,
-    ) { songs, playlists, importState, controls, actionSong ->
+        libraryActions,
+    ) { songs, playlists, importState, controls, actions ->
         val filteredSongs = searchSongsForLibrary(
             songs = filterSongsForLibrary(songs, controls.filter),
             query = controls.query,
@@ -73,8 +83,11 @@ class LibraryViewModel(
                     group = group,
                 )
             }
-        val currentActionSong = actionSong?.let { selected ->
+        val currentActionSong = actions.actionSong?.let { selected ->
             songs.firstOrNull { it.id == selected.id } ?: selected
+        }
+        val currentDeleteSong = actions.deleteSong?.let { selected ->
+            songs.firstOrNull { it.id == selected.id }
         }
 
         LibraryUiState(
@@ -94,6 +107,7 @@ class LibraryViewModel(
                     playlists = playlists,
                 )
             },
+            deleteConfirmationSong = currentDeleteSong,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -196,6 +210,27 @@ class LibraryViewModel(
         startEditing(song)
     }
 
+    fun requestDeleteFromTrackActions(song: Song) {
+        trackActionsSong.value = null
+        deleteConfirmationSong.value = song
+    }
+
+    fun dismissDeleteConfirmation() {
+        deleteConfirmationSong.value = null
+    }
+
+    fun confirmDeleteTrack() {
+        val song = deleteConfirmationSong.value ?: return
+        deleteConfirmationSong.value = null
+        trackActionsSong.value = null
+        editFormState.value = null
+
+        viewModelScope.launch {
+            songRepository.deleteSong(song)
+            appMusicStorage.deleteStoredAudio(song)
+        }
+    }
+
     fun addTrackActionSongToPlaylist(playlist: Playlist) {
         val song = trackActionsSong.value ?: return
         viewModelScope.launch {
@@ -233,6 +268,11 @@ private data class LibraryControlState(
     val query: String,
     val editForm: EditFormState?,
     val groupKey: LibraryGroupKey?,
+)
+
+private data class LibraryActionState(
+    val actionSong: Song?,
+    val deleteSong: Song?,
 )
 
 private data class LibraryGroupKey(

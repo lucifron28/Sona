@@ -15,6 +15,7 @@ data class LibraryUiState(
     val selectedGroup: SelectedLibraryGroup? = null,
     val editState: TrackEditState? = null,
     val trackActionsState: TrackActionsState? = null,
+    val deleteConfirmationSong: Song? = null,
 )
 
 data class LibraryGroup(

@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.sona.domain.model.Playlist
@@ -191,7 +192,7 @@ private fun PlaylistDetail(
         }
 
         Text(
-            text = "Playlist songs",
+            text = "In this playlist",
             style = MaterialTheme.typography.titleMedium,
         )
         if (uiState.playlistSongs.isEmpty()) {
@@ -204,12 +205,8 @@ private fun PlaylistDetail(
             SongList(
                 songs = uiState.playlistSongs,
                 modifier = Modifier.weight(1f),
-                actionIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = null,
-                    )
-                },
+                actionIcon = Icons.Filled.RemoveCircle,
+                actionContentDescription = "Remove from playlist",
                 onAction = onRemoveSong,
             )
         }
@@ -228,12 +225,8 @@ private fun PlaylistDetail(
             SongList(
                 songs = uiState.availableSongs,
                 modifier = Modifier.weight(1f),
-                actionIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = null,
-                    )
-                },
+                actionIcon = Icons.Filled.Add,
+                actionContentDescription = "Add to playlist",
                 onAction = onAddSong,
             )
         }
@@ -243,7 +236,8 @@ private fun PlaylistDetail(
 @Composable
 private fun SongList(
     songs: List<Song>,
-    actionIcon: @Composable () -> Unit,
+    actionIcon: ImageVector,
+    actionContentDescription: String,
     onAction: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -268,8 +262,13 @@ private fun SongList(
                     )
                 },
                 trailingContent = {
-                    IconButton(onClick = { onAction(song) }) {
-                        actionIcon()
+                    IconButton(
+                        onClick = { onAction(song) },
+                    ) {
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = actionContentDescription,
+                        )
                     }
                 },
             )

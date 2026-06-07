@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -47,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,8 +71,11 @@ fun LibraryScreen(
     onFavoriteClick: (Song) -> Unit,
     onSongLongClick: (Song) -> Unit,
     onRenameFromActions: (Song) -> Unit,
+    onDeleteFromActions: (Song) -> Unit,
     onAddToPlaylist: (Playlist) -> Unit,
     onDismissTrackActions: () -> Unit,
+    onConfirmDelete: () -> Unit,
+    onDismissDelete: () -> Unit,
     onEditTitleChange: (String) -> Unit,
     onEditArtistChange: (String) -> Unit,
     onSaveEdit: () -> Unit,
@@ -161,12 +166,21 @@ fun LibraryScreen(
         TrackActionsSheet(
             actionsState = actionsState,
             onRename = onRenameFromActions,
+            onDelete = onDeleteFromActions,
             onAddToPlaylist = onAddToPlaylist,
             onToggleFavorite = { song ->
                 onFavoriteClick(song)
                 onDismissTrackActions()
             },
             onDismiss = onDismissTrackActions,
+        )
+    }
+
+    uiState.deleteConfirmationSong?.let { song ->
+        DeleteTrackDialog(
+            song = song,
+            onConfirm = onConfirmDelete,
+            onDismiss = onDismissDelete,
         )
     }
 }
@@ -554,6 +568,7 @@ private val LibraryUiState.isSelectedViewEmpty: Boolean
 private fun TrackActionsSheet(
     actionsState: TrackActionsState,
     onRename: (Song) -> Unit,
+    onDelete: (Song) -> Unit,
     onAddToPlaylist: (Playlist) -> Unit,
     onToggleFavorite: (Song) -> Unit,
     onDismiss: () -> Unit,
@@ -608,6 +623,18 @@ private fun TrackActionsSheet(
                 },
                 onClick = { onToggleFavorite(actionsState.song) },
             )
+            ActionSheetRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                },
+                label = "Delete from library",
+                onClick = { onDelete(actionsState.song) },
+                textColor = MaterialTheme.colorScheme.error,
+            )
 
             Text(
                 text = "Add to playlist",
@@ -644,6 +671,7 @@ private fun ActionSheetRow(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    textColor: Color? = null,
 ) {
     ListItem(
         modifier = modifier
@@ -655,7 +683,38 @@ private fun ActionSheetRow(
                 text = label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                color = textColor ?: MaterialTheme.colorScheme.onSurface,
             )
+        },
+    )
+}
+
+@Composable
+private fun DeleteTrackDialog(
+    song: Song,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Delete track?") },
+        text = {
+            Text(
+                text = "Remove \"${song.title}\" from your library and playlists. Sona's stored audio copy will also be deleted.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = "Delete",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel")
+            }
         },
     )
 }

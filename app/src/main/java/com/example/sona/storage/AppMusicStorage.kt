@@ -53,6 +53,16 @@ class AppMusicStorage(
         )
     }
 
+    suspend fun deleteStoredAudio(song: Song) = withContext(Dispatchers.IO) {
+        val file = runCatching {
+            File(requireNotNull(Uri.parse(song.uri).path))
+        }.getOrNull() ?: return@withContext
+
+        if (file.isStoredInMusicDirectory()) {
+            file.delete()
+        }
+    }
+
     private fun copyIntoMusicStorage(sourceUri: Uri, displayName: String?): Uri {
         val musicDirectory = File(context.filesDir, "music").apply {
             mkdirs()
@@ -70,6 +80,12 @@ class AppMusicStorage(
         }
 
         return Uri.fromFile(targetFile)
+    }
+
+    private fun File.isStoredInMusicDirectory(): Boolean {
+        val musicDirectory = File(context.filesDir, "music").canonicalFile
+        val targetFile = canonicalFile
+        return targetFile.path.startsWith(musicDirectory.path + File.separator)
     }
 
     private fun readAudioMetadata(uri: Uri): AudioMetadata {
