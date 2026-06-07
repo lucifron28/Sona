@@ -6,6 +6,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,68 +54,89 @@ fun SonaDefaultAlbumArt(
 
     val labelColor = MaterialTheme.colorScheme.primaryContainer
     val holeColor = MaterialTheme.colorScheme.background
+    val ringColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+    val backingColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f)
+    val rimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+    val grooveColor = Color.White.copy(alpha = 0.05f)
 
     Box(
         modifier = modifier
-            .aspectRatio(1f) // Ensure it stays perfectly circular
-            .clip(CircleShape)
-            .graphicsLayer {
-                rotationZ = rotation.value
-            },
+            .aspectRatio(1f)
+            .background(backingColor, CircleShape)
+            .border(width = 1.dp, color = ringColor, shape = CircleShape)
+            .padding(VinylRingPadding),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2, size.height / 2)
-            val radius = size.minDimension / 2
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .graphicsLayer {
+                    rotationZ = rotation.value
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val radius = size.minDimension / 2
+                val rimStroke = 1.dp.toPx()
 
-            // Draw vinyl disc (always dark to represent a vinyl record)
-            drawCircle(
-                color = Color(0xFF181818),
-                radius = radius,
-                center = center
-            )
-
-            // Draw grooves
-            val grooveCount = 4
-            for (i in 1..grooveCount) {
+                // Draw vinyl disc (always dark to represent a vinyl record)
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.05f),
-                    radius = radius * (0.4f + 0.12f * i),
+                    color = Color(0xFF181818),
+                    radius = radius,
+                    center = center
+                )
+
+                drawCircle(
+                    color = rimColor,
+                    radius = radius - rimStroke,
                     center = center,
-                    style = Stroke(width = 1.dp.toPx())
+                    style = Stroke(width = rimStroke)
+                )
+
+                // Draw grooves
+                val grooveCount = 4
+                for (i in 1..grooveCount) {
+                    drawCircle(
+                        color = grooveColor,
+                        radius = radius * (0.4f + 0.12f * i),
+                        center = center,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
+
+                // Draw center label (theme-aware)
+                drawCircle(
+                    color = labelColor,
+                    radius = radius * 0.35f,
+                    center = center
+                )
+
+                // Draw center hole (theme-aware background)
+                drawCircle(
+                    color = holeColor,
+                    radius = radius * 0.05f,
+                    center = center
                 )
             }
 
-            // Draw center label (theme-aware)
-            drawCircle(
-                color = labelColor,
-                radius = radius * 0.35f,
-                center = center
-            )
-
-            // Draw center hole (theme-aware background)
-            drawCircle(
-                color = holeColor,
-                radius = radius * 0.05f,
-                center = center
+            // Sona Logo in the center
+            // TODO: Replace with R.drawable.sona_symbol if a specific symbol asset is provided later.
+            // Currently using R.drawable.sona_logo as the fallback/placeholder.
+            Image(
+                painter = painterResource(id = R.drawable.sona_logo),
+                contentDescription = "Sona Logo",
+                modifier = Modifier
+                    .fillMaxSize(0.25f)
+                    .graphicsLayer {
+                        if (!spinLogoWithVinyl) {
+                            // Counter-rotate the logo so it appears upright while the vinyl spins
+                            rotationZ = -rotation.value
+                        }
+                    }
             )
         }
-
-        // Sona Logo in the center
-        // TODO: Replace with R.drawable.sona_symbol if a specific symbol asset is provided later.
-        // Currently using R.drawable.sona_logo as the fallback/placeholder.
-        Image(
-            painter = painterResource(id = R.drawable.sona_logo),
-            contentDescription = "Sona Logo",
-            modifier = Modifier
-                .fillMaxSize(0.25f)
-                .graphicsLayer {
-                    if (!spinLogoWithVinyl) {
-                        // Counter-rotate the logo so it appears upright while the vinyl spins
-                        rotationZ = -rotation.value
-                    }
-                }
-        )
     }
 }
 
@@ -142,3 +165,5 @@ fun SonaDefaultAlbumArtPreview_Paused() {
         }
     }
 }
+
+private val VinylRingPadding = 3.dp
