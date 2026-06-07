@@ -14,6 +14,7 @@ import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 
 class UrlImportWorker(
     context: Context,
@@ -50,35 +51,25 @@ class UrlImportWorker(
             DownloadLogger.info(downloadId, "Initializing YoutubeDL")
             YoutubeDL.getInstance().init(applicationContext)
 
-            updateState(
-                repository = downloadRepository,
-                id = downloadId,
-                status = DownloadStatus.FETCHING_METADATA,
-                diagnosticMessage = "Downloader initialized. Fetching metadata.",
-            )
-            DownloadLogger.info(downloadId, "Fetching metadata for ${downloadItem.url}")
-            val videoInfo = YoutubeDL.getInstance().getInfo(singleVideoRequest(downloadItem.url))
-            val title = videoInfo.title ?: videoInfo.fulltitle
-            val artist = videoInfo.uploader
-            DownloadLogger.info(downloadId, "Metadata fetched title=${title ?: "unknown"} artist=${artist ?: "unknown"}")
-
-            updateState(
-                repository = downloadRepository,
-                id = downloadId,
-                status = DownloadStatus.DOWNLOADING,
-                title = title,
-                diagnosticMessage = "Metadata fetched. Preparing best audio download.",
-            )
-
             val outputDirectory = File(applicationContext.filesDir, "music").apply {
                 mkdirs()
             }
             val outputTemplate = File(outputDirectory, "sona-import-$downloadId.%(ext)s")
             DownloadLogger.info(downloadId, "Output template=${outputTemplate.absolutePath}")
+            cleanupExistingArtifacts(outputDirectory, downloadId)
+
+            var title: String? = null
+            var artist: String? = null
             var latestProgress = 0f
             var lastPersistedPercent = -1
             var downloadAttempt = 1
             var repairedDownloader = false
+            updateState(
+                repository = downloadRepository,
+                id = downloadId,
+                status = DownloadStatus.DOWNLOADING,
+                diagnosticMessage = "Downloader initialized. Resolving audio stream.",
+            )
             while (true) {
                 val request = audioDownloadRequest(downloadItem.url, outputTemplate)
                 val attemptProcessId = "$processId-attempt-$downloadAttempt"
@@ -155,6 +146,15 @@ class UrlImportWorker(
             DownloadLogger.info(downloadId, "yt-dlp execute finished")
 
             DownloadLogger.info(downloadId, "Finalizing downloaded audio")
+            val downloadedMetadata = findInfoJsonFile(outputDirectory, downloadId)
+                ?.readDownloadedMetadata()
+                ?: DownloadedAudioMetadata()
+            title = downloadedMetadata.title
+            artist = downloadedMetadata.artist
+            DownloadLogger.info(
+                downloadId,
+                "Metadata resolved title=${title ?: "unknown"} artist=${artist ?: "unknown"}",
+            )
             updateState(
                 repository = downloadRepository,
                 id = downloadId,
@@ -182,6 +182,7 @@ class UrlImportWorker(
                 )
             }
             DownloadLogger.info(downloadId, "Song added and download completed title=${song.title}")
+            findInfoJsonFile(outputDirectory, downloadId)?.delete()
 
             Result.success()
         } catch (error: YoutubeDL.CanceledException) {
@@ -211,8 +212,37 @@ class UrlImportWorker(
 
     private fun findOutputFile(outputDirectory: File, downloadId: Long): File? =
         outputDirectory
-            .listFiles { file -> file.isFile && file.name.startsWith("sona-import-$downloadId.") }
+            .listFiles { file ->
+                file.isFile &&
+                    file.name.startsWith("sona-import-$downloadId.") &&
+                    !file.name.endsWith(INFO_JSON_SUFFIX) &&
+                    !file.name.endsWith(PARTIAL_DOWNLOAD_SUFFIX)
+            }
             ?.maxByOrNull { it.lastModified() }
+
+    private fun findInfoJsonFile(outputDirectory: File, downloadId: Long): File? =
+        outputDirectory
+            .listFiles { file ->
+                file.isFile &&
+                    file.name.startsWith("sona-import-$downloadId.") &&
+                    file.name.endsWith(INFO_JSON_SUFFIX)
+            }
+            ?.maxByOrNull { it.lastModified() }
+
+    private fun cleanupExistingArtifacts(outputDirectory: File, downloadId: Long) {
+        outputDirectory
+            .listFiles { file -> file.isFile && file.name.startsWith("sona-import-$downloadId.") }
+            ?.forEach { file -> file.delete() }
+    }
+
+    private fun File.readDownloadedMetadata(): DownloadedAudioMetadata =
+        runCatching {
+            val json = JSONObject(readText())
+            DownloadedAudioMetadata(
+                title = json.firstString("title", "fulltitle"),
+                artist = json.firstString("artist", "uploader", "channel"),
+            )
+        }.getOrDefault(DownloadedAudioMetadata())
 
     private fun singleVideoRequest(url: String): YoutubeDLRequest =
         YoutubeDLRequest(url).apply {
@@ -227,6 +257,7 @@ class UrlImportWorker(
             addOption("-f", AUDIO_FORMAT_SELECTOR)
             addOption("--newline")
             addOption("--no-mtime")
+            addOption("--write-info-json")
             addOption("-o", outputTemplate.absolutePath)
         }
 
@@ -249,5 +280,19 @@ class UrlImportWorker(
 
     private companion object {
         const val AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best"
+        const val INFO_JSON_SUFFIX = ".info.json"
+        const val PARTIAL_DOWNLOAD_SUFFIX = ".part"
     }
 }
+
+private data class DownloadedAudioMetadata(
+    val title: String? = null,
+    val artist: String? = null,
+)
+
+private fun JSONObject.firstString(vararg keys: String): String? =
+    keys.firstNotNullOfOrNull { key ->
+        optString(key)
+            .trim()
+            .takeIf { it.isNotBlank() }
+    }

@@ -16,9 +16,9 @@ class UrlImportManager(
     private val applicationContext = context.applicationContext
 
     suspend fun enqueue(url: String): Long {
-        val trimmedUrl = url.trim()
-        DownloadLogger.info(null, "Creating URL import for $trimmedUrl")
-        val downloadId = downloadRepository.enqueue(trimmedUrl)
+        val normalizedUrl = url.normalizedDownloadUrl()
+        DownloadLogger.info(null, "Creating URL import for $normalizedUrl")
+        val downloadId = downloadRepository.enqueue(normalizedUrl)
         val request = OneTimeWorkRequestBuilder<UrlImportWorker>()
             .setInputData(workDataOf(KEY_DOWNLOAD_ID to downloadId))
             .build()
