@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/lucifron28/Sona/releases/latest">Download APK</a>
+  <a href="#install-on-android">Install on Android</a>
   |
   <a href="#features">Features</a>
   |
@@ -25,13 +25,28 @@
   <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue">
 </p>
 
-## Download
+## Install on Android
 
-The latest signed release is available from [GitHub Releases](https://github.com/lucifron28/Sona/releases/latest).
+Requires Android 7.0 or newer.
 
-Release builds include ABI-specific APKs and a universal APK. Choose the matching device architecture for a smaller download, or use the universal APK for broader compatibility.
+**[Download Sona v0.2.1 for most Android phones, ARM64 APK](https://github.com/lucifron28/Sona/releases/download/v0.2.1/Sona-v0.2.1-arm64-v8a.apk)**
 
-Android may ask you to allow installs from your browser or file manager because these APKs are sideloaded.
+1. Open this README on your Android device and download the APK above.
+2. Open the downloaded APK. If Android asks, allow your browser or file manager to install apps from this source.
+3. Tap **Install**, then open Sona.
+
+For other devices, open [GitHub Releases](https://github.com/lucifron28/Sona/releases/latest) and choose an APK under **Assets**:
+
+| APK | Device |
+| --- | --- |
+| `arm64-v8a` | Most modern Android phones |
+| `armeabi-v7a` | Older 32-bit ARM devices |
+| `x86` or `x86_64` | Devices or emulators with the matching Intel architecture |
+| `universal` | All supported architectures, with a larger download |
+
+Import local audio from **Library**, or open **Downloads** to import audio from an authorized YouTube URL. You can also share a YouTube link to Sona from Android's share menu.
+
+If Sona is useful to you, consider starring this repository. Bug reports and feedback are welcome in [Issues](https://github.com/lucifron28/Sona/issues).
 
 ## Why Sona
 
