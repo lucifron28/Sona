@@ -15,6 +15,15 @@ class SongRepository(
 
     suspend fun getSong(id: Long): Song? = songDao.getSong(id)?.toSong()
 
+    suspend fun getSongByUri(uri: String): Song? = songDao.getSongByUri(uri)?.toSong()
+
+    suspend fun getSongs(ids: List<Long>): List<Song> {
+        if (ids.isEmpty()) return emptyList()
+
+        val songsById = songDao.getSongs(ids).associateBy { it.id }
+        return ids.mapNotNull(songsById::get).map { it.toSong() }
+    }
+
     suspend fun addSong(song: Song): Long = songDao.insertSong(song.toEntity())
 
     suspend fun updateSong(song: Song) {

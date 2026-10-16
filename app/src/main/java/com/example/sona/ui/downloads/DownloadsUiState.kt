@@ -6,7 +6,6 @@ import com.example.sona.domain.model.DownloadStatus
 data class DownloadsUiState(
     val downloads: List<DownloadItem> = emptyList(),
     val url: String = "",
-    val isUpdatingDownloader: Boolean = false,
     val message: String? = null,
     val snackbarEvent: DownloadSnackbarEvent? = null,
 )
@@ -23,12 +22,15 @@ fun DownloadItem.toSnackbarEvent(): DownloadSnackbarEvent? = when (status) {
         message = "Track downloaded: ${title ?: "Imported track"}",
         isError = false,
     )
-    DownloadStatus.FAILED,
-    DownloadStatus.CANCELLED,
-    -> DownloadSnackbarEvent(
+    DownloadStatus.FAILED -> DownloadSnackbarEvent(
         id = "$id-${status.name}",
-        message = errorMessage ?: "Track did not download.",
+        message = "Import failed. Open download details to see why.",
         isError = true,
+    )
+    DownloadStatus.CANCELLED -> DownloadSnackbarEvent(
+        id = "$id-${status.name}",
+        message = "Download cancelled.",
+        isError = false,
     )
     DownloadStatus.QUEUED,
     DownloadStatus.FETCHING_METADATA,

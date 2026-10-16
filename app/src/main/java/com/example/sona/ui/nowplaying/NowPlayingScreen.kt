@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -40,6 +47,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,7 +77,7 @@ import com.example.sona.core.utils.formatDuration
 import com.example.sona.domain.model.Song
 import com.example.sona.playback.PlaybackRepeatMode
 import com.example.sona.playback.PlaybackState
-import com.example.sona.ui.components.SonaDefaultAlbumArt
+import com.example.sona.ui.components.SongArtwork
 import kotlin.math.roundToInt
 
 @Composable
@@ -81,13 +93,44 @@ fun NowPlayingScreen(
     onQueueSongClick: (Song) -> Unit,
     onMoveQueueItem: (Int, Int) -> Unit,
     onRemoveQueueSong: (Song) -> Unit,
+    onUndoQueueRemoval: (Song, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val queueSnackbarHostState = remember { SnackbarHostState() }
+    var pendingQueueRemoval by remember { mutableStateOf<QueueRemovalUndo?>(null) }
+
+    LaunchedEffect(pendingQueueRemoval) {
+        pendingQueueRemoval?.let { removal ->
+            if (
+                queueSnackbarHostState.showSnackbar(
+                    message = "Removed from queue",
+                    actionLabel = "Undo",
+                    withDismissAction = true,
+                ) == SnackbarResult.ActionPerformed
+            ) {
+                onUndoQueueRemoval(removal.song, removal.index)
+            }
+            pendingQueueRemoval = null
+        }
+    }
+
     if (playbackState.currentSong == null) {
-        EmptyNowPlaying(
-            contentPadding = contentPadding,
-            modifier = modifier,
-        )
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+        ) {
+            EmptyNowPlaying(
+                contentPadding = PaddingValues(),
+                modifier = Modifier,
+            )
+            SnackbarHost(
+                hostState = queueSnackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp),
+            )
+        }
         return
     }
 
@@ -97,84 +140,105 @@ fun NowPlayingScreen(
         .coerceAtLeast(0L)
         .coerceAtMost(durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE)
 
-    Column(
+
+    val removeQueueSongWithUndo: (Song) -> Unit = { song ->
+        val queueItemIndex = playbackState.queue.indexOfFirst { it.id == song.id }
+        if (queueItemIndex >= 0) {
+            pendingQueueRemoval = QueueRemovalUndo(song, queueItemIndex)
+            onRemoveQueueSong(song)
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(contentPadding)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(contentPadding),
     ) {
-        SonaDefaultAlbumArt(
-            isPlaying = playbackState.isPlaying,
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .aspectRatio(1f)
-                .padding(top = 8.dp),
-            spinLogoWithVinyl = true
-        )
-        Text(
-            text = currentSong.title,
-            style = MaterialTheme.typography.headlineSmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = currentSong.artist,
-            modifier = Modifier.padding(top = 8.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
-        QueueLabel(
-            queueIndex = playbackState.queueIndex,
-            queueSize = playbackState.queueSize,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-
-        PlaybackProgress(
-            positionMs = positionMs,
-            durationMs = durationMs,
-            onSeek = onSeek,
-        )
-
-        PlaybackModeControls(
-            isShuffleEnabled = playbackState.isShuffleEnabled,
-            repeatMode = playbackState.repeatMode,
-            onToggleShuffle = onToggleShuffle,
-            onCycleRepeatMode = onCycleRepeatMode,
-        )
-
-        PlaybackControls(
-            isPlaying = playbackState.isPlaying,
-            onPlayPause = onPlayPause,
-            onSkipNext = onSkipNext,
-            onSkipPrevious = onSkipPrevious,
-        )
-
-        ExpandableQueuePanel(
-            queue = playbackState.queue,
-            currentSongId = currentSong.id,
-            queueIndex = playbackState.queueIndex,
-            onQueueSongClick = onQueueSongClick,
-            onMoveQueueItem = onMoveQueueItem,
-            onRemoveQueueSong = onRemoveQueueSong,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        playbackState.errorMessage?.let { errorMessage ->
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SongArtwork(
+                artworkUri = currentSong.artworkUri,
+                isPlaying = playbackState.isPlaying,
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .aspectRatio(1f)
+                    .padding(top = 8.dp),
+                spinLogoWithVinyl = true,
+            )
             Text(
-                text = errorMessage,
-                modifier = Modifier.padding(top = 24.dp),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
+                text = currentSong.title,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
             )
+            Text(
+                text = currentSong.artist,
+                modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            QueueLabel(
+                queueIndex = playbackState.queueIndex,
+                queueSize = playbackState.queueSize,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+
+            PlaybackProgress(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                onSeek = onSeek,
+            )
+
+            PlaybackModeControls(
+                isShuffleEnabled = playbackState.isShuffleEnabled,
+                repeatMode = playbackState.repeatMode,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeatMode = onCycleRepeatMode,
+            )
+
+            PlaybackControls(
+                isPlaying = playbackState.isPlaying,
+                onPlayPause = onPlayPause,
+                onSkipNext = onSkipNext,
+                onSkipPrevious = onSkipPrevious,
+            )
+
+            ExpandableQueuePanel(
+                queue = playbackState.queue,
+                currentSongId = currentSong.id,
+                queueIndex = playbackState.queueIndex,
+                onQueueSongClick = onQueueSongClick,
+                onMoveQueueItem = onMoveQueueItem,
+                onRemoveQueueSong = removeQueueSongWithUndo,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            playbackState.errorMessage?.let { errorMessage ->
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier.padding(top = 24.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
+        SnackbarHost(
+            hostState = queueSnackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(12.dp),
+        )
     }
 }
 
@@ -363,7 +427,7 @@ private fun ExpandableQueuePanel(
 
     var expanded by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    val queueScrollState = rememberScrollState()
+    val queueListState = rememberLazyListState()
     val rowHeightPx = with(density) { QueueRowHeight.toPx() }
     val queuePanelMaxHeightPx = with(density) { QueuePanelMaxHeight.toPx() }
     var reorderDrag by remember { mutableStateOf<QueueReorderDrag?>(null) }
@@ -417,97 +481,107 @@ private fun ExpandableQueuePanel(
         }
 
         AnimatedVisibility(visible = expanded) {
-            Column(
+            LazyColumn(
+                state = queueListState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .heightIn(max = QueuePanelMaxHeight)
+                    .wrapContentHeight()
                     .clip(MaterialTheme.shapes.small)
-                    .clipToBounds()
-                    .verticalScroll(queueScrollState),
+                    .clipToBounds(),
             ) {
                 val targetIndex = reorderDrag?.targetIndex(
                     queueSize = queue.size,
                     rowHeightPx = rowHeightPx,
                 )
+                val scrollOffsetPx = queueListState.firstVisibleItemIndex * rowHeightPx +
+                    queueListState.firstVisibleItemScrollOffset
 
-                queue.forEachIndexed { index, song ->
-                    DraggableQueueRow(
-                        index = index,
-                        song = song,
-                        isCurrent = song.id == currentSongId,
-                        isReorderActive = reorderDrag?.songId == song.id,
-                        reorderOffsetY = queueRowReorderOffsetY(
+                itemsIndexed(
+                    items = queue,
+                    key = { _, song -> song.id },
+                ) { index, song ->
+                    Column {
+                        DraggableQueueRow(
                             index = index,
-                            songId = song.id,
-                            drag = reorderDrag,
-                            targetIndex = targetIndex,
-                            rowHeightPx = rowHeightPx,
-                        ),
-                        queueSize = queue.size,
-                        onClick = { onQueueSongClick(song) },
-                        onReorderStart = {
-                            reorderDrag = QueueReorderDrag(
+                            song = song,
+                            isCurrent = song.id == currentSongId,
+                            isReorderActive = reorderDrag?.songId == song.id,
+                            reorderOffsetY = queueRowReorderOffsetY(
+                                index = index,
                                 songId = song.id,
-                                fromIndex = index,
-                                offsetY = 0f,
-                            )
-                        },
-                        onReorderDrag = { dragAmount ->
-                            reorderDrag = (reorderDrag ?: QueueReorderDrag(
-                                songId = song.id,
-                                fromIndex = index,
-                                offsetY = 0f,
-                            )).let { drag ->
-                                if (drag.songId != song.id) {
-                                    QueueReorderDrag(
-                                        songId = song.id,
-                                        fromIndex = index,
-                                        offsetY = 0f,
-                                    )
-                                } else {
-                                    val visibleHeightPx = (queue.size * rowHeightPx)
-                                        .coerceAtMost(queuePanelMaxHeightPx)
-                                    val rowTopPx = drag.fromIndex * rowHeightPx
-                                    val minQueueOffsetY = -drag.fromIndex * rowHeightPx
-                                    val maxQueueOffsetY = (queue.lastIndex - drag.fromIndex) * rowHeightPx
-                                    val minVisibleOffsetY = queueScrollState.value - rowTopPx
-                                    val maxVisibleOffsetY = queueScrollState.value +
-                                        visibleHeightPx -
-                                        rowTopPx -
-                                        rowHeightPx
-                                    val minOffsetY = maxOf(minQueueOffsetY, minVisibleOffsetY)
-                                    val maxOffsetY = minOf(maxQueueOffsetY, maxVisibleOffsetY)
-
-                                    drag.copy(
-                                        offsetY = (drag.offsetY + dragAmount)
-                                            .coerceIn(minOffsetY, maxOffsetY),
-                                    )
-                                }
-                            }
-                        },
-                        onReorderEnd = {
-                            val drag = reorderDrag
-                            val finalTargetIndex = drag?.targetIndex(
-                                queueSize = queue.size,
+                                drag = reorderDrag,
+                                targetIndex = targetIndex,
                                 rowHeightPx = rowHeightPx,
-                            )
-                            reorderDrag = null
+                            ),
+                            queueSize = queue.size,
+                            onClick = { onQueueSongClick(song) },
+                            onMoveUp = { onMoveQueueItem(index, index - 1) },
+                            onMoveDown = { onMoveQueueItem(index, index + 1) },
+                            onReorderStart = {
+                                reorderDrag = QueueReorderDrag(
+                                    songId = song.id,
+                                    fromIndex = index,
+                                    offsetY = 0f,
+                                )
+                            },
+                            onReorderDrag = { dragAmount ->
+                                reorderDrag = (reorderDrag ?: QueueReorderDrag(
+                                    songId = song.id,
+                                    fromIndex = index,
+                                    offsetY = 0f,
+                                )).let { drag ->
+                                    if (drag.songId != song.id) {
+                                        QueueReorderDrag(
+                                            songId = song.id,
+                                            fromIndex = index,
+                                            offsetY = 0f,
+                                        )
+                                    } else {
+                                        val visibleHeightPx = (queue.size * rowHeightPx)
+                                            .coerceAtMost(queuePanelMaxHeightPx)
+                                        val rowTopPx = drag.fromIndex * rowHeightPx
+                                        val minQueueOffsetY = -drag.fromIndex * rowHeightPx
+                                        val maxQueueOffsetY =
+                                            (queue.lastIndex - drag.fromIndex) * rowHeightPx
+                                        val minVisibleOffsetY = scrollOffsetPx - rowTopPx
+                                        val maxVisibleOffsetY = scrollOffsetPx +
+                                            visibleHeightPx -
+                                            rowTopPx -
+                                            rowHeightPx
+                                        val minOffsetY = maxOf(minQueueOffsetY, minVisibleOffsetY)
+                                        val maxOffsetY = minOf(maxQueueOffsetY, maxVisibleOffsetY)
 
-                            if (drag != null &&
-                                finalTargetIndex != null &&
-                                finalTargetIndex != drag.fromIndex
-                            ) {
-                                onMoveQueueItem(drag.fromIndex, finalTargetIndex)
-                            }
-                        },
-                        onReorderCancel = {
-                            reorderDrag = null
-                        },
-                        onRemove = { onRemoveQueueSong(song) },
-                    )
-                    if (index < queue.lastIndex) {
-                        HorizontalDivider()
+                                        drag.copy(
+                                            offsetY = (drag.offsetY + dragAmount)
+                                                .coerceIn(minOffsetY, maxOffsetY),
+                                        )
+                                    }
+                                }
+                            },
+                            onReorderEnd = {
+                                val drag = reorderDrag
+                                val finalTargetIndex = drag?.targetIndex(
+                                    queueSize = queue.size,
+                                    rowHeightPx = rowHeightPx,
+                                )
+                                reorderDrag = null
+
+                                if (
+                                    drag != null &&
+                                    finalTargetIndex != null &&
+                                    finalTargetIndex != drag.fromIndex
+                                ) {
+                                    onMoveQueueItem(drag.fromIndex, finalTargetIndex)
+                                }
+                            },
+                            onReorderCancel = {
+                                reorderDrag = null
+                            },
+                            onRemove = { onRemoveQueueSong(song) },
+                        )
+                        if (index < queue.lastIndex) HorizontalDivider()
                     }
                 }
             }
@@ -524,14 +598,18 @@ private fun DraggableQueueRow(
     reorderOffsetY: Float,
     queueSize: Int,
     onClick: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onReorderStart: () -> Unit,
     onReorderDrag: (Float) -> Unit,
     onReorderEnd: () -> Unit,
     onReorderCancel: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
-) {
+)
+{
     var swipeOffsetX by remember(song.id) { mutableStateOf(0f) }
+    var actionsExpanded by remember(song.id) { mutableStateOf(false) }
     val revealTrash = swipeOffsetX > TrashRevealDistancePx
     val animatedReorderOffsetY by animateFloatAsState(
         targetValue = reorderOffsetY,
@@ -644,13 +722,54 @@ private fun DraggableQueueRow(
             trailingContent = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         text = formatDuration(song.durationMs),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    IconButton(onClick = onRemove) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Remove ${song.title} from queue",
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { actionsExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "Queue actions for ${song.title}",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = actionsExpanded,
+                            onDismissRequest = { actionsExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(text = "Move up") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
+                                },
+                                enabled = index > 0,
+                                onClick = {
+                                    actionsExpanded = false
+                                    onMoveUp()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = "Move down") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                                },
+                                enabled = index < queueSize - 1,
+                                onClick = {
+                                    actionsExpanded = false
+                                    onMoveDown()
+                                },
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -678,7 +797,7 @@ private fun DraggableQueueRow(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.DragHandle,
-                            contentDescription = "Drag to reorder",
+                            contentDescription = "Drag to reorder ${song.title}",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -687,6 +806,12 @@ private fun DraggableQueueRow(
         )
     }
 }
+
+private data class QueueRemovalUndo(
+    val song: Song,
+    val index: Int,
+)
+
 
 private data class QueueReorderDrag(
     val songId: Long,

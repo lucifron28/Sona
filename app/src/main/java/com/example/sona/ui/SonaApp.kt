@@ -56,6 +56,8 @@ import com.example.sona.ui.settings.SettingsViewModelFactory
 @Composable
 fun SonaApp(
     appContainer: AppContainer,
+    sharedUrl: String? = null,
+    onSharedUrlConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -64,6 +66,13 @@ fun SonaApp(
     val playbackState by appContainer.playerController.playbackState.collectAsStateWithLifecycle()
     var showNowPlayingSheet by remember { mutableStateOf(false) }
     val nowPlayingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    LaunchedEffect(sharedUrl) {
+        if (sharedUrl != null) {
+            navController.navigate(SonaDestination.Downloads.route) {
+                launchSingleTop = true
+            }
+        }
+    }
     val libraryViewModelFactory = remember(appContainer) {
         LibraryViewModelFactory(
             songRepository = appContainer.songRepository,
@@ -72,7 +81,10 @@ fun SonaApp(
         )
     }
     val settingsViewModelFactory = remember(appContainer) {
-        SettingsViewModelFactory(appContainer.settingsRepository)
+        SettingsViewModelFactory(
+            appContainer.settingsRepository,
+            appContainer.urlImportManager,
+        )
     }
     val playlistsViewModelFactory = remember(appContainer) {
         PlaylistsViewModelFactory(
@@ -84,14 +96,9 @@ fun SonaApp(
         DownloadsViewModelFactory(
             downloadRepository = appContainer.downloadRepository,
             urlImportManager = appContainer.urlImportManager,
+            songRepository = appContainer.songRepository,
+            playerController = appContainer.playerController,
         )
-    }
-    val currentSongId = playbackState.currentSong?.id
-
-    LaunchedEffect(currentSongId) {
-        currentSongId?.let { songId ->
-            appContainer.songRepository.recordPlayed(songId, System.currentTimeMillis())
-        }
     }
 
     Scaffold(
@@ -187,14 +194,22 @@ fun SonaApp(
                     factory = downloadsViewModelFactory,
                 )
                 val uiState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+                LaunchedEffect(sharedUrl) {
+                    sharedUrl?.let { url ->
+                        downloadsViewModel.setUrl(url)
+                        onSharedUrlConsumed()
+                    }
+                }
 
                 DownloadsScreen(
                     contentPadding = innerPadding,
                     uiState = uiState,
                     onUrlChange = downloadsViewModel::setUrl,
                     onImportClick = downloadsViewModel::enqueueImport,
-                    onUpdateDownloader = downloadsViewModel::updateDownloader,
-                    onDeleteDownload = downloadsViewModel::deleteDownload,
+                    onCancelDownload = downloadsViewModel::cancelDownload,
+                    onRetryDownload = downloadsViewModel::retryDownload,
+                    onPlayDownload = downloadsViewModel::playDownload,
+                    onRemoveHistory = downloadsViewModel::removeHistory,
                     onSnackbarShown = downloadsViewModel::consumeSnackbar,
                 )
             }
@@ -230,6 +245,7 @@ fun SonaApp(
                     contentPadding = innerPadding,
                     uiState = uiState,
                     onThemeSelected = settingsViewModel::setThemePreference,
+                    onUpdateDownloader = settingsViewModel::updateDownloader,
                 )
             }
         }
@@ -252,6 +268,7 @@ fun SonaApp(
                 onQueueSongClick = appContainer.playerController::playQueueSong,
                 onMoveQueueItem = appContainer.playerController::moveQueueItem,
                 onRemoveQueueSong = appContainer.playerController::removeQueueItem,
+                onUndoQueueRemoval = appContainer.playerController::restoreQueueItem,
             )
         }
     }

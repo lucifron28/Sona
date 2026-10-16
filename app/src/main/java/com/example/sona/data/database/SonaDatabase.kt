@@ -22,7 +22,7 @@ import com.example.sona.data.entities.SongEntity
         DownloadItemEntity::class,
     ],
     version = 4,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class SonaDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
@@ -69,10 +69,8 @@ abstract class SonaDatabase : RoomDatabase() {
                         title TEXT,
                         status TEXT NOT NULL,
                         progress REAL NOT NULL,
-                        workId TEXT,
                         outputUri TEXT,
                         errorMessage TEXT,
-                        diagnosticMessage TEXT,
                         createdAt INTEGER NOT NULL,
                         completedAt INTEGER
                     )
@@ -88,18 +86,20 @@ abstract class SonaDatabase : RoomDatabase() {
             }
         }
 
+        internal const val DATABASE_NAME = "sona.db"
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
         @Volatile
         private var INSTANCE: SonaDatabase? = null
-
         fun create(context: Context): SonaDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     SonaDatabase::class.java,
-                    "sona.db",
+                    DATABASE_NAME,
                 )
                     .enableMultiInstanceInvalidation()
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(*ALL_MIGRATIONS)
                     .build()
                     .also { INSTANCE = it }
             }

@@ -11,6 +11,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.example.sona.data.database.SonaDatabase
+import com.example.sona.data.repository.SongRepository
 import com.example.sona.domain.model.Song
 import java.util.concurrent.ExecutionException
 import kotlinx.coroutines.CoroutineScope
@@ -24,12 +26,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlayerController(context: Context) {
     private val applicationContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val pendingActions = ArrayDeque<(MediaController) -> Unit>()
     private var mediaController: MediaController? = null
+    private val songRepository by lazy {
+        SongRepository(SonaDatabase.create(applicationContext).songDao())
+    }
+    private var queueLoadRequest = 0
     private var queue: List<Song> = emptyList()
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -38,6 +45,9 @@ class PlayerController(context: Context) {
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             syncState()
+            if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                reconcileQueue(player)
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -63,6 +73,7 @@ class PlayerController(context: Context) {
                         mediaController = controller
                         controller.addListener(playerListener)
                         drainPendingActions(controller)
+                        reconcileQueue(controller)
                         syncState()
                     }
             },
@@ -198,9 +209,22 @@ class PlayerController(context: Context) {
                 controller.removeMediaItem(index)
             }
             if (queue.isEmpty()) {
-                controller.stop()
+                controller.clearMediaItems()
             } else if (controller.playbackState == Player.STATE_IDLE) {
                 controller.prepare()
+            }
+            syncState()
+        }
+    }
+
+    fun restoreQueueItem(song: Song, index: Int) {
+        val insertionIndex = index.coerceIn(0, queue.size)
+        queue = queue.insertItem(insertionIndex, song)
+        withController { controller ->
+            controller.addMediaItem(insertionIndex, song.toMediaItem())
+            if (controller.playbackState == Player.STATE_IDLE) {
+                controller.prepare()
+                controller.play()
             }
             syncState()
         }
@@ -253,6 +277,48 @@ class PlayerController(context: Context) {
         }
     }
 
+    private fun reconcileQueue(controller: Player) {
+        val mediaItemCount = controller.mediaItemCount
+        val mediaIds = ArrayList<Long>(mediaItemCount)
+        for (index in 0 until mediaItemCount) {
+            mediaIds += controller.getMediaItemAt(index).mediaId.toLongOrNull() ?: return
+        }
+        var queueMatches = mediaIds.size == queue.size
+        if (queueMatches) {
+            for (index in mediaIds.indices) {
+                if (mediaIds[index] != queue[index].id) {
+                    queueMatches = false
+                    break
+                }
+            }
+        }
+        if (queueMatches) return
+
+        val request = ++queueLoadRequest
+        if (mediaIds.isEmpty()) {
+            queue = emptyList()
+            syncState()
+            return
+        }
+
+        scope.launch {
+            val restoredQueue = withContext(Dispatchers.IO) {
+                songRepository.getSongs(mediaIds)
+            }
+            if (request != queueLoadRequest || mediaController !== controller) return@launch
+
+            val currentMediaIds = ArrayList<Long>(controller.mediaItemCount)
+            for (index in 0 until controller.mediaItemCount) {
+                val id = controller.getMediaItemAt(index).mediaId.toLongOrNull() ?: return@launch
+                currentMediaIds += id
+            }
+            if (currentMediaIds != mediaIds) return@launch
+
+            queue = restoredQueue
+            syncState()
+        }
+    }
+
     private fun syncState() {
         val controller = mediaController ?: return
         val currentIndex = controller.currentMediaItemIndex.takeIf {
@@ -282,7 +348,7 @@ class PlayerController(context: Context) {
     }
 }
 
-private fun Song.toMediaItem(): MediaItem {
+internal fun Song.toMediaItem(): MediaItem {
     val metadataBuilder = MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)

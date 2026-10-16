@@ -18,6 +18,9 @@ class DownloadRepository(
     suspend fun getDownload(id: Long): DownloadItem? =
         downloadDao.getDownload(id)?.toDownloadItem()
 
+    suspend fun findImportCandidates(url: String): List<DownloadItem> =
+        downloadDao.findImportCandidates(url).map { it.toDownloadItem() }
+
     suspend fun enqueue(url: String): Long = downloadDao.insertDownload(
         DownloadItemEntity(
             url = url,
@@ -34,7 +37,7 @@ class DownloadRepository(
         downloadDao.markWorkEnqueued(
             id = id,
             workId = workId,
-            diagnosticMessage = "Queued in WorkManager. workId=${workId.take(8)}",
+            diagnosticMessage = "Queued in WorkManager.",
         )
     }
 
@@ -60,32 +63,56 @@ class DownloadRepository(
         )
     }
 
+    suspend fun updateProgress(
+        id: Long,
+        progress: Float,
+        title: String?,
+        diagnosticMessage: String?,
+    ) {
+        downloadDao.updateDownloadProgress(
+            id = id,
+            progress = progress.coerceIn(0f, 100f),
+            title = title,
+            diagnosticMessage = diagnosticMessage,
+        )
+    }
+
     suspend fun markCompleted(
         id: Long,
         title: String?,
         outputUri: String,
-    ) {
-        updateState(
+    ): Boolean = downloadDao.updateDownloadState(
+        id = id,
+        status = DownloadStatus.COMPLETED.name,
+        title = title,
+        progress = 100f,
+        outputUri = outputUri,
+        errorMessage = null,
+        diagnosticMessage = "Import complete. Added to library.",
+        completedAt = now(),
+    ) > 0
+
+    suspend fun markRetryScheduled(id: Long, attempt: Int, maxRetries: Int): Boolean =
+        downloadDao.markRetryScheduled(
             id = id,
-            status = DownloadStatus.COMPLETED,
-            title = title,
-            progress = 100f,
-            outputUri = outputUri,
-            diagnosticMessage = "Import complete. Added to library.",
-            completedAt = now(),
-        )
-    }
+            diagnosticMessage = "Temporary network issue. Retry $attempt of $maxRetries scheduled.",
+        ) > 0
 
     suspend fun markFailed(id: Long, errorMessage: String) {
         updateState(
             id = id,
             status = DownloadStatus.FAILED,
             errorMessage = errorMessage,
-            diagnosticMessage = "Import failed: $errorMessage",
+            diagnosticMessage = "Import failed.",
         )
     }
 
-    suspend fun deleteDownload(id: Long) {
-        downloadDao.deleteDownload(id)
-    }
+    suspend fun cancelDownload(id: Long): Boolean =
+        downloadDao.cancelDownload(id) > 0
+
+    suspend fun retryDownload(id: Long): Boolean =
+        downloadDao.retryDownload(id) > 0
+
+    suspend fun removeHistory(id: Long): Boolean =
+        downloadDao.deleteTerminalDownload(id) > 0
 }

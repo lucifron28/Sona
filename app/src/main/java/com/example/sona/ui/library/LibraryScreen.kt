@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +27,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -94,12 +93,6 @@ fun LibraryScreen(
             .fillMaxSize()
             .padding(contentPadding),
     ) {
-        LibraryHeader(
-            isImporting = uiState.isImporting,
-            onImportClick = {
-                audioPickerLauncher.launch(arrayOf("audio/*"))
-            },
-        )
         LibraryViewTabs(
             selectedView = uiState.selectedView,
             onViewSelected = onViewSelected,
@@ -107,6 +100,10 @@ fun LibraryScreen(
         LibrarySearchField(
             query = uiState.searchQuery,
             onQueryChange = onSearchQueryChange,
+            isImporting = uiState.isImporting,
+            onImportClick = {
+                audioPickerLauncher.launch(arrayOf("audio/*"))
+            },
         )
         LibraryFilters(
             selectedFilter = uiState.selectedFilter,
@@ -137,7 +134,16 @@ fun LibraryScreen(
                 )
             }
             uiState.isSelectedViewEmpty -> {
-                EmptyLibrary(modifier = Modifier.weight(1f))
+                LibraryEmptyState(
+                    uiState = uiState,
+                    onImportClick = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+                    onClearSearch = { onSearchQueryChange("") },
+                    onShowAllSongs = {
+                        onFilterSelected(LibraryFilter.ALL)
+                        onViewSelected(LibraryView.SONGS)
+                    },
+                    modifier = Modifier.weight(1f),
+                )
             }
             else -> {
                 LibraryContent(
@@ -209,6 +215,8 @@ private fun LibraryViewTabs(
 private fun LibrarySearchField(
     query: String,
     onQueryChange: (String) -> Unit,
+    isImporting: Boolean,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -216,7 +224,7 @@ private fun LibrarySearchField(
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         label = { Text(text = "Search library") },
         singleLine = true,
         leadingIcon = {
@@ -226,11 +234,22 @@ private fun LibrarySearchField(
             )
         },
         trailingIcon = {
-            if (query.isNotBlank()) {
-                IconButton(onClick = { onQueryChange("") }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (query.isNotBlank()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Clear search",
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onImportClick,
+                    enabled = !isImporting,
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Clear search",
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Import audio",
                     )
                 }
             }
@@ -248,7 +267,7 @@ private fun LibraryFilters(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         LibraryFilter.entries.forEach { filter ->
@@ -261,36 +280,6 @@ private fun LibraryFilters(
     }
 }
 
-@Composable
-private fun LibraryHeader(
-    isImporting: Boolean,
-    onImportClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Songs",
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Button(
-            onClick = onImportClick,
-            enabled = !isImporting,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Import")
-        }
-    }
-}
 
 @Composable
 private fun ImportError(
@@ -317,7 +306,51 @@ private fun ImportError(
 }
 
 @Composable
-private fun EmptyLibrary(modifier: Modifier = Modifier) {
+private fun LibraryEmptyState(
+    uiState: LibraryUiState,
+    onImportClick: () -> Unit,
+    onClearSearch: () -> Unit,
+    onShowAllSongs: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isLibraryEmpty = uiState.librarySongCount == 0
+    val title: String
+    val message: String
+    val actionLabel: String
+    val action: () -> Unit
+    when {
+        isLibraryEmpty -> {
+            title = "No songs yet"
+            message = "Import local audio to build your library."
+            actionLabel = "Import audio"
+            action = onImportClick
+        }
+        uiState.searchQuery.isNotBlank() && uiState.songs.isEmpty() -> {
+            title = "No search results"
+            message = "No songs match “${uiState.searchQuery}”."
+            actionLabel = "Clear search"
+            action = onClearSearch
+        }
+        uiState.selectedFilter == LibraryFilter.FAVORITES && uiState.songs.isEmpty() -> {
+            title = "No favorites yet"
+            message = "Songs you mark as favorites will appear here."
+            actionLabel = "Show all songs"
+            action = onShowAllSongs
+        }
+        uiState.selectedFilter == LibraryFilter.RECENT && uiState.songs.isEmpty() -> {
+            title = "No recent songs"
+            message = "Songs you play will appear here."
+            actionLabel = "Show all songs"
+            action = onShowAllSongs
+        }
+        else -> {
+            title = "Nothing to show"
+            message = "Try another library view or filter."
+            actionLabel = "Show all songs"
+            action = onShowAllSongs
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -329,17 +362,23 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text = "No songs yet",
+                text = title,
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "Import local audio to build your library.",
+                text = message,
                 modifier = Modifier.padding(top = 8.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            TextButton(
+                onClick = action,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text(text = actionLabel)
+            }
         }
     }
 }
@@ -375,7 +414,7 @@ private fun LibraryContent(
             LibraryView.ARTISTS -> {
                 items(
                     items = uiState.artistGroups,
-                    key = { group -> group.name.lowercase() },
+                    key = { group -> group.identity },
                 ) { group ->
                     LibraryGroupRow(
                         group = group,
@@ -387,7 +426,7 @@ private fun LibraryContent(
             LibraryView.ALBUMS -> {
                 items(
                     items = uiState.albumGroups,
-                    key = { group -> group.name.lowercase() },
+                    key = { group -> group.identity },
                 ) { group ->
                     LibraryGroupRow(
                         group = group,
@@ -525,7 +564,7 @@ private fun SongRow(
         trailingContent = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 Text(
                     text = formatDuration(song.durationMs),
@@ -549,6 +588,12 @@ private fun SongRow(
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
+                    )
+                }
+                IconButton(onClick = onLongClick) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "More actions for ${song.title}",
                     )
                 }
             }

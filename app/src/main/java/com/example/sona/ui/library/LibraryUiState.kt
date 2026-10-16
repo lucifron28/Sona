@@ -7,6 +7,7 @@ data class LibraryUiState(
     val songs: List<Song> = emptyList(),
     val artistGroups: List<LibraryGroup> = emptyList(),
     val albumGroups: List<LibraryGroup> = emptyList(),
+    val librarySongCount: Int = 0,
     val selectedFilter: LibraryFilter = LibraryFilter.ALL,
     val selectedView: LibraryView = LibraryView.SONGS,
     val searchQuery: String = "",
@@ -22,6 +23,7 @@ data class LibraryGroup(
     val name: String,
     val subtitle: String,
     val songs: List<Song>,
+    val identity: String = name,
 )
 
 data class SelectedLibraryGroup(

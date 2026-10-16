@@ -10,7 +10,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.yausername.youtubedl_android.YoutubeDL
 import java.util.concurrent.TimeUnit
 
 class DownloaderAutoUpdateWorker(
@@ -26,7 +25,6 @@ class DownloaderAutoUpdateWorker(
         return runCatching {
             DownloaderUpdater.update(
                 context = applicationContext,
-                channel = YoutubeDL.UpdateChannel.MASTER,
                 reason = "background auto-update",
             )
         }.fold(

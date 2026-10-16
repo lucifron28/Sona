@@ -49,23 +49,35 @@ fun artistGroupsForLibrary(songs: List<Song>): List<LibraryGroup> =
 
 fun albumGroupsForLibrary(songs: List<Song>): List<LibraryGroup> =
     songs
-        .groupBy { song -> song.album?.trim()?.ifBlank { null } ?: UNKNOWN_ALBUM }
-        .toSortedGroups { album, albumSongs ->
-            val artistCount = albumSongs
-                .map { it.artist.trim().ifBlank { UNKNOWN_ARTIST } }
-                .distinctBy { it.lowercase() }
-                .size
+        .groupBy { song ->
+            val album = song.album?.trim()?.ifBlank { null } ?: UNKNOWN_ALBUM
+            val artist = song.artist.trim().ifBlank { UNKNOWN_ARTIST }
+            album.lowercase() to artist.lowercase()
+        }
+        .entries
+        .sortedWith(
+            compareBy(
+                { (identity, _) -> identity.first.lowercase() },
+                { (identity, _) -> identity.second.lowercase() },
+            ),
+        )
+        .map { (identity, albumSongs) ->
+            val firstSong = albumSongs.first()
+            val album = firstSong.album?.trim()?.ifBlank { null } ?: UNKNOWN_ALBUM
+            val artist = firstSong.artist.trim().ifBlank { UNKNOWN_ARTIST }
+            val sortedSongs = albumSongs.sortedBy { it.title.lowercase() }
             LibraryGroup(
                 name = album,
-                subtitle = buildCountSubtitle(
-                    songCount = albumSongs.size,
-                    detailCount = artistCount,
-                    detailSingular = "artist",
-                    detailPlural = "artists",
-                ),
-                songs = albumSongs,
+                identity = "${identity.first.length}:${identity.first}${identity.second.length}:${identity.second}",
+                subtitle = "$artist - ${buildSongCount(albumSongs.size)}",
+                songs = sortedSongs,
             )
         }
+
+private fun buildSongCount(songCount: Int): String {
+    val songLabel = if (songCount == 1) "song" else "songs"
+    return "$songCount $songLabel"
+}
 
 private fun Map<String, List<Song>>.toSortedGroups(
     transform: (String, List<Song>) -> LibraryGroup,

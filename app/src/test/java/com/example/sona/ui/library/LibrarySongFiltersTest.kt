@@ -77,7 +77,20 @@ class LibrarySongFiltersTest {
         val groups = albumGroupsForLibrary(listOf(unknown))
 
         assertEquals("Unknown album", groups.single().name)
-        assertEquals("1 song - 1 artist", groups.single().subtitle)
+        assertEquals("Ron - 1 song", groups.single().subtitle)
+    }
+
+    @Test
+    fun albumGroupsForLibrary_keepsSameTitleAlbumsByDifferentArtistsDistinct() {
+        val first = song(id = 1L, title = "One", artist = "Ron", album = "Blue")
+        val second = song(id = 2L, title = "Two", artist = "Sona", album = "Blue")
+
+        val groups = albumGroupsForLibrary(listOf(first, second))
+
+        assertEquals(2, groups.size)
+        assertEquals(listOf("Ron - 1 song", "Sona - 1 song"), groups.map { it.subtitle })
+        assertEquals(2, groups.map { it.identity }.distinct().size)
+        assertEquals(listOf(first, second), groups.map { it.songs.single() })
     }
 
     private fun song(

@@ -9,6 +9,7 @@ import com.example.sona.domain.model.Song
 import com.example.sona.domain.model.SourceType
 import java.io.File
 import java.util.UUID
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -27,6 +28,7 @@ class AppMusicStorage(
             album = metadata.album,
             durationMs = metadata.durationMs,
             uri = storedUri.toString(),
+            artworkUri = metadata.artworkUri,
             dateAdded = now(),
             sourceType = SourceType.LOCAL_FILE,
         )
@@ -47,11 +49,23 @@ class AppMusicStorage(
             album = metadata.album,
             durationMs = metadata.durationMs,
             uri = storedUri.toString(),
+            artworkUri = metadata.artworkUri,
             dateAdded = now(),
             sourceType = SourceType.IMPORTED_URL,
             sourceUrl = sourceUrl,
         )
     }
+
+    internal suspend fun isDownloadedAudioAvailable(uriString: String): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val uri = Uri.parse(uriString)
+                val path = uri.path ?: return@withContext false
+                val file = File(path)
+                uri.scheme == "file" &&
+                    file.isAvailableStoredAudioIn(File(context.filesDir, "music"))
+            }.getOrDefault(false)
+        }
 
     suspend fun deleteStoredAudio(song: Song) = withContext(Dispatchers.IO) {
         val file = runCatching {
@@ -82,11 +96,8 @@ class AppMusicStorage(
         return Uri.fromFile(targetFile)
     }
 
-    private fun File.isStoredInMusicDirectory(): Boolean {
-        val musicDirectory = File(context.filesDir, "music").canonicalFile
-        val targetFile = canonicalFile
-        return targetFile.path.startsWith(musicDirectory.path + File.separator)
-    }
+    private fun File.isStoredInMusicDirectory(): Boolean =
+        isWithinDirectory(File(context.filesDir, "music"))
 
     private fun readAudioMetadata(uri: Uri): AudioMetadata {
         val retriever = MediaMetadataRetriever()
@@ -100,12 +111,40 @@ class AppMusicStorage(
                     .extractString(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull()
                     ?: 0L,
+                artworkUri = runCatching {
+                    retriever.embeddedPicture?.let(::storeEmbeddedArtwork)
+                }.getOrNull(),
             )
         } catch (_: RuntimeException) {
             AudioMetadata()
         } finally {
             retriever.release()
         }
+    }
+
+    private fun storeEmbeddedArtwork(image: ByteArray): String? {
+        if (image.isEmpty()) return null
+        val artworkDirectory = File(context.filesDir, "artwork")
+        if (!artworkDirectory.exists() && !artworkDirectory.mkdirs()) return null
+
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(image)
+            .joinToString(separator = "") { byte ->
+                (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+            }
+        val artworkFile = File(artworkDirectory, "$hash.img")
+        if (!artworkFile.exists()) {
+            val temporaryFile = File(artworkDirectory, "${UUID.randomUUID()}.tmp")
+            try {
+                temporaryFile.outputStream().use { output -> output.write(image) }
+                if (!temporaryFile.renameTo(artworkFile) && !artworkFile.exists()) return null
+            } catch (_: Exception) {
+                return null
+            } finally {
+                temporaryFile.delete()
+            }
+        }
+        return Uri.fromFile(artworkFile).toString()
     }
 
     private fun Uri.displayName(): String? {
@@ -136,9 +175,19 @@ class AppMusicStorage(
         substringBeforeLast('.', missingDelimiterValue = this)
 }
 
+internal fun File.isAvailableStoredAudioIn(musicDirectory: File): Boolean =
+    isFile && length() > 0L && isWithinDirectory(musicDirectory)
+
+private fun File.isWithinDirectory(directory: File): Boolean = runCatching {
+    val canonicalDirectory = directory.canonicalFile
+    val canonicalFile = canonicalFile
+    canonicalFile.path.startsWith(canonicalDirectory.path + File.separator)
+}.getOrDefault(false)
+
 private data class AudioMetadata(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
     val durationMs: Long = 0L,
+    val artworkUri: String? = null,
 )

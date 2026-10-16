@@ -30,7 +30,12 @@ class AppContainer(context: Context) {
     }
 
     val urlImportManager: UrlImportManager by lazy {
-        UrlImportManager(applicationContext, downloadRepository)
+        UrlImportManager(
+            context = applicationContext,
+            downloadRepository = downloadRepository,
+            songRepository = songRepository,
+            appMusicStorage = appMusicStorage,
+        )
     }
 
     val appMusicStorage: AppMusicStorage by lazy {

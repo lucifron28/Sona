@@ -27,33 +27,34 @@
 
 ## Download
 
-The latest signed MVP build is available from GitHub Releases:
+The latest signed release is available from [GitHub Releases](https://github.com/lucifron28/Sona/releases/latest).
 
-[Download Sona v0.1.2](https://github.com/lucifron28/Sona/releases/tag/v0.1.2)
+Release builds include ABI-specific APKs and a universal APK. Choose the matching device architecture for a smaller download, or use the universal APK for broader compatibility.
 
-Android may ask you to allow installs from your browser or file manager because this is a sideloaded APK.
+Android may ask you to allow installs from your browser or file manager because these APKs are sideloaded.
 
 ## Why Sona
 
-Sona is a focused local-first music player for Android. It combines a clean Compose interface, reliable Media3 playback, local library management, and direct URL audio imports into one lightweight MVP.
+Sona is a local-first music player for Android, built with Compose, Media3, Room, and yt-dlp powered audio imports.
 
-The project is still early, but the core flow is usable: import or download a track, edit metadata, organize playback, and listen through a Spotify-style mini player and expanded now-playing view.
+Import local audio or authorized URLs, edit metadata, organize playback, and listen through the mini player and expanded now-playing view.
 
 ## Features
 
-- Local audio import through the Android file picker without broad storage permissions.
-- Room-backed library persistence for songs, metadata, playlists, and download records.
-- Media3 ExoPlayer playback with queue, shuffle, repeat, seek, next, and previous controls.
-- Spotify-inspired mini player that expands into a full now-playing screen.
-- Searchable library with Songs, Artists, and Albums views.
+- Local audio import through the Android file picker without broad storage permissions; embedded artwork is extracted when available.
+- Room-backed library persistence for songs, metadata, playlists, and download records, with migrations from every supported database version.
+- Media3 playback with queue, shuffle, repeat, seek, next, and previous controls; queue and position restore after process restart.
+- Audio-focus handling and pause-on-headphone-disconnect behavior.
+- Searchable library with Songs, Artists, and Albums views, distinct empty states, and album grouping by title and artist.
 - Artist and album drill-down views that open like folders before playback.
-- Long-press track actions for rename, favorite, and playlist actions.
-- Editable track name and artist, including existing artist suggestions.
-- URL audio import powered by youtubedl-android and yt-dlp.
-- Faster YouTube imports by avoiding duplicate metadata extraction.
-- Download progress, diagnostics, success and failure snackbar feedback.
+- Visible track overflow actions, long-press actions, and accessible queue move controls.
+- URL audio import powered by yt-dlp through youtubedl-android.
+- Network-aware, resumable URL imports with bounded transient retries, serialized yt-dlp operations, cancellation, retry, and completion actions.
+- Download stages, foreground progress notification, throttled progress persistence, and detailed diagnostics behind a details action.
+- Android share-to-Sona support for shared text URLs.
+- One stable yt-dlp update channel shared by manual and automatic updates.
 - Light, dark, system, and Dracula theme options.
-- Signed release APK builds for direct Android installation.
+- Release builds use R8/resource shrinking and include ABI-specific and universal APKs.
 
 ## Screenshots
 
@@ -103,29 +104,22 @@ Release signing uses an ignored root-level `keystore.properties` file.
 1. Copy `keystore.properties.example` to `keystore.properties`.
 2. Point `storeFile` to your release keystore.
 3. Fill in the store and key passwords.
-4. Build the release APK:
+4. Build the release APKs:
 
 ```powershell
 .\gradlew.bat :app:assembleRelease
 ```
 
-Signed local release builds are generated at:
-
-```text
-app/build/outputs/apk/release/app-release.apk
-```
+Release APKs are generated under `app/build/outputs/apk/release/`. The universal APK supports every ABI included in the build; install an ABI-specific APK for a smaller package.
 
 Keep your release keystore backed up. Android updates must be signed with the same key.
 
 ## Roadmap
 
-- Background playback service and notification controls.
 - MediaStore scanning for local device music.
-- Album artwork extraction and editing.
 - Lyrics support.
 - Equalizer and audio effects.
 - Smarter playlist management.
-- Download queue controls and cancellation.
 - Better first-run onboarding.
 - Screenshots and demo video in the README.
 

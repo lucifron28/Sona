@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -24,6 +28,7 @@ fun SettingsScreen(
     contentPadding: PaddingValues,
     uiState: SettingsUiState,
     onThemeSelected: (ThemePreference) -> Unit,
+    onUpdateDownloader: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -53,6 +58,35 @@ fun SettingsScreen(
                     onSelected = { onThemeSelected(themePreference) },
                 )
             }
+        }
+
+        Text(
+            text = "Download support",
+            modifier = Modifier.padding(top = 8.dp),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Update the audio downloader when a supported site stops working.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = onUpdateDownloader,
+            enabled = !uiState.isUpdatingDownloader,
+        ) {
+            Icon(imageVector = Icons.Filled.Update, contentDescription = null)
+            Text(
+                text = if (uiState.isUpdatingDownloader) "Updating…" else "Update downloader",
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        uiState.downloaderMessage?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

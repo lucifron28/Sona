@@ -5,6 +5,7 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 
 object DownloaderUpdater {
     const val AUTO_UPDATE_INTERVAL_MS = 24L * 60L * 60L * 1000L
@@ -13,26 +14,30 @@ object DownloaderUpdater {
 
     suspend fun update(
         context: Context,
-        channel: YoutubeDL.UpdateChannel,
         reason: String,
         now: () -> Long = { System.currentTimeMillis() },
     ): String = withContext(Dispatchers.IO) {
-        val applicationContext = context.applicationContext
-        DownloadLogger.info(null, "Initializing downloader for $reason")
-        YoutubeDL.getInstance().init(applicationContext)
-        FFmpeg.getInstance().init(applicationContext)
+        DownloaderOperationLock.mutex.withLock {
+            val applicationContext = context.applicationContext
+            DownloadLogger.info(null, "Initializing downloader for $reason")
+            YoutubeDL.getInstance().init(applicationContext)
+            FFmpeg.getInstance().init(applicationContext)
 
-        DownloadLogger.info(null, "Updating downloader channel=${channel::class.simpleName} reason=$reason")
-        val status = YoutubeDL.getInstance().updateYoutubeDL(applicationContext, channel)
-        val statusLabel = status?.name?.lowercase()?.replace('_', ' ') ?: "updated"
-        applicationContext
-            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_LAST_UPDATE_AT, now())
-            .apply()
-        DownloadLogger.info(null, "Downloader update result=$statusLabel reason=$reason")
+            DownloadLogger.info(
+                null,
+                "Updating downloader channel=${UPDATE_CHANNEL::class.simpleName} reason=$reason",
+            )
+            val status = YoutubeDL.getInstance().updateYoutubeDL(applicationContext, UPDATE_CHANNEL)
+            val statusLabel = status?.name?.lowercase()?.replace('_', ' ') ?: "updated"
+            applicationContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_LAST_UPDATE_AT, now())
+                .apply()
+            DownloadLogger.info(null, "Downloader update result=$statusLabel reason=$reason")
 
-        "Downloader $statusLabel"
+            "Downloader $statusLabel"
+        }
     }
 
     fun shouldAutoUpdate(
@@ -50,6 +55,7 @@ object DownloaderUpdater {
             intervalMs = AUTO_UPDATE_INTERVAL_MS,
         )
     }
+    private val UPDATE_CHANNEL = YoutubeDL.UpdateChannel.STABLE
 }
 
 fun isUpdateStale(

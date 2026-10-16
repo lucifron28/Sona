@@ -9,10 +9,12 @@ import com.example.sona.data.repository.SongRepository
 import com.example.sona.domain.model.Playlist
 import com.example.sona.domain.model.Song
 import com.example.sona.storage.AppMusicStorage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,35 +56,55 @@ class LibraryViewModel(
         )
     }
 
-    val uiState = combine(
+    private val libraryContent = combine(
         songRepository.songs,
-        playlistRepository.playlists,
-        importState,
-        libraryControls,
-        libraryActions,
-    ) { songs, playlists, importState, controls, actions ->
+        selectedFilter,
+        selectedView,
+        searchQuery,
+        selectedGroupKey,
+    ) { songs, filter, view, query, groupKey ->
         val filteredSongs = searchSongsForLibrary(
-            songs = filterSongsForLibrary(songs, controls.filter),
-            query = controls.query,
+            songs = filterSongsForLibrary(songs, filter),
+            query = query,
         )
-        val artistGroups = artistGroupsForLibrary(filteredSongs)
-        val albumGroups = albumGroupsForLibrary(filteredSongs)
-        val selectedGroup = controls.groupKey
-            ?.takeIf { it.view == controls.view }
+        val artistGroups = if (view == LibraryView.ARTISTS) {
+            artistGroupsForLibrary(filteredSongs)
+        } else {
+            emptyList()
+        }
+        val albumGroups = if (view == LibraryView.ALBUMS) {
+            albumGroupsForLibrary(filteredSongs)
+        } else {
+            emptyList()
+        }
+        val selectedGroup = groupKey
+            ?.takeIf { it.view == view }
             ?.let { key ->
                 val groups = when (key.view) {
                     LibraryView.ARTISTS -> artistGroups
                     LibraryView.ALBUMS -> albumGroups
                     LibraryView.SONGS -> emptyList()
                 }
-                groups.firstOrNull { group -> group.name.equals(key.name, ignoreCase = true) }
+                groups.firstOrNull { group -> group.identity == key.identity }
             }
-            ?.let { group ->
-                SelectedLibraryGroup(
-                    view = controls.view,
-                    group = group,
-                )
-            }
+            ?.let { group -> SelectedLibraryGroup(view = view, group = group) }
+        LibraryContentState(
+            allSongs = songs,
+            filteredSongs = filteredSongs,
+            artistGroups = artistGroups,
+            albumGroups = albumGroups,
+            selectedGroup = selectedGroup,
+        )
+    }
+
+    val uiState = combine(
+        libraryContent,
+        playlistRepository.playlists,
+        importState,
+        libraryControls,
+        libraryActions,
+    ) { content, playlists, importState, controls, actions ->
+        val songs = content.allSongs
         val currentActionSong = actions.actionSong?.let { selected ->
             songs.firstOrNull { it.id == selected.id } ?: selected
         }
@@ -91,25 +113,23 @@ class LibraryViewModel(
         }
 
         LibraryUiState(
-            songs = filteredSongs,
-            artistGroups = artistGroups,
-            albumGroups = albumGroups,
+            songs = content.filteredSongs,
+            artistGroups = content.artistGroups,
+            albumGroups = content.albumGroups,
+            librarySongCount = songs.size,
             selectedFilter = controls.filter,
             selectedView = controls.view,
             searchQuery = controls.query,
             isImporting = importState.isImporting,
             errorMessage = importState.errorMessage,
-            selectedGroup = selectedGroup,
+            selectedGroup = content.selectedGroup,
             editState = controls.editForm?.toTrackEditState(songs),
             trackActionsState = currentActionSong?.let { song ->
-                TrackActionsState(
-                    song = song,
-                    playlists = playlists,
-                )
+                TrackActionsState(song = song, playlists = playlists)
             },
             deleteConfirmationSong = currentDeleteSong,
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = LibraryUiState(),
@@ -158,7 +178,7 @@ class LibraryViewModel(
         if (view == LibraryView.SONGS) return
         selectedGroupKey.value = LibraryGroupKey(
             view = view,
-            name = group.name,
+            identity = group.identity,
         )
     }
 
@@ -275,9 +295,17 @@ private data class LibraryActionState(
     val deleteSong: Song?,
 )
 
+private data class LibraryContentState(
+    val allSongs: List<Song>,
+    val filteredSongs: List<Song>,
+    val artistGroups: List<LibraryGroup>,
+    val albumGroups: List<LibraryGroup>,
+    val selectedGroup: SelectedLibraryGroup?,
+)
+
 private data class LibraryGroupKey(
     val view: LibraryView,
-    val name: String,
+    val identity: String,
 )
 
 private data class EditFormState(

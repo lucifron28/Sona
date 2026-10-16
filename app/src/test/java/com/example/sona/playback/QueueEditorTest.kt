@@ -26,4 +26,12 @@ class QueueEditorTest {
             listOf("A", "B", "C").removeIndex(1),
         )
     }
+
+    @Test
+    fun insertItem_restoresRemovedItemAtOriginalPosition() {
+        assertEquals(
+            listOf("A", "B", "C"),
+            listOf("A", "C").insertItem(index = 1, item = "B"),
+        )
+    }
 }

@@ -1,5 +1,10 @@
 package com.example.sona.ui.downloads
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,10 +17,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,8 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.sona.domain.model.DownloadItem
 import com.example.sona.domain.model.DownloadStatus
 
@@ -50,13 +63,33 @@ fun DownloadsScreen(
     uiState: DownloadsUiState,
     onUrlChange: (String) -> Unit,
     onImportClick: () -> Unit,
-    onUpdateDownloader: () -> Unit,
-    onDeleteDownload: (Long) -> Unit,
+    onCancelDownload: (Long) -> Unit,
+    onRetryDownload: (Long) -> Unit,
+    onPlayDownload: (Long) -> Unit,
+    onRemoveHistory: (Long) -> Unit,
     onSnackbarShown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = {},
+    )
+    val importClick = {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        onImportClick()
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     var snackbarIsError by remember { mutableStateOf(false) }
+    var detailsDownload by remember { mutableStateOf<DownloadItem?>(null) }
 
     LaunchedEffect(uiState.snackbarEvent?.id) {
         uiState.snackbarEvent?.let { event ->
@@ -86,90 +119,89 @@ fun DownloadsScreen(
             }
         },
     ) { snackbarPadding ->
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-            .padding(snackbarPadding)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .padding(snackbarPadding)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 text = "Downloads",
                 style = MaterialTheme.typography.titleLarge,
             )
-            TextButton(
-                onClick = onUpdateDownloader,
-                enabled = !uiState.isUpdatingDownloader,
+            OutlinedTextField(
+                value = uiState.url,
+                onValueChange = onUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(text = "Authorized audio URL") },
+                singleLine = true,
+            )
+            Button(
+                onClick = importClick,
+                enabled = uiState.url.isNotBlank(),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Update,
-                    contentDescription = null,
-                )
+                Icon(imageVector = Icons.Filled.Download, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Update")
+                Text(text = "Import")
             }
-        }
 
-        OutlinedTextField(
-            value = uiState.url,
-            onValueChange = onUrlChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(text = "Authorized audio URL") },
-            singleLine = true,
-        )
-        Button(
-            onClick = onImportClick,
-            enabled = uiState.url.isNotBlank(),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Download,
-                contentDescription = null,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Import")
-        }
+            uiState.message?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
-        uiState.message?.let { message ->
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        if (uiState.downloads.isEmpty()) {
-            Text(
-                text = "No URL imports yet.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(
-                    items = uiState.downloads,
-                    key = { download -> download.id },
-                ) { download ->
-                    DownloadRow(
-                        download = download,
-                        onDelete = { onDeleteDownload(download.id) },
-                    )
-                    HorizontalDivider()
+            if (uiState.downloads.isEmpty()) {
+                Text(
+                    text = "No imports yet. Add an authorized audio URL to get started.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(
+                        items = uiState.downloads,
+                        key = { download -> download.id },
+                    ) { download ->
+                        DownloadRow(
+                            download = download,
+                            onCancel = { onCancelDownload(download.id) },
+                            onRetry = { onRetryDownload(download.id) },
+                            onPlay = { onPlayDownload(download.id) },
+                            onRemoveHistory = { onRemoveHistory(download.id) },
+                            onShowDetails = { detailsDownload = download },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
     }
+
+    detailsDownload?.let { download ->
+        DownloadDetailsDialog(
+            download = download,
+            onDismiss = { detailsDownload = null },
+        )
     }
 }
 
 @Composable
 private fun DownloadRow(
     download: DownloadItem,
-    onDelete: () -> Unit,
+    onCancel: () -> Unit,
+    onRetry: () -> Unit,
+    onPlay: () -> Unit,
+    onRemoveHistory: () -> Unit,
+    onShowDetails: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
@@ -188,21 +220,12 @@ private fun DownloadRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                download.diagnosticMessage?.let { diagnosticMessage ->
-                    Text(
-                        text = diagnosticMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
                 if (download.status.inProgress) {
                     DownloadProgress(download = download)
                 }
-                download.errorMessage?.let { errorMessage ->
+                if (download.status == DownloadStatus.FAILED) {
                     Text(
-                        text = errorMessage,
+                        text = "Import failed. Open details for the error.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -210,11 +233,47 @@ private fun DownloadRow(
             }
         },
         trailingContent = {
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete import",
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                when (download.status) {
+                    DownloadStatus.QUEUED,
+                    DownloadStatus.FETCHING_METADATA,
+                    DownloadStatus.DOWNLOADING,
+                    DownloadStatus.EXTRACTING,
+                    -> IconButton(onClick = onCancel) {
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = "Cancel download",
+                        )
+                    }
+                    DownloadStatus.FAILED,
+                    DownloadStatus.CANCELLED,
+                    -> IconButton(onClick = onRetry) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Retry download",
+                        )
+                    }
+                    DownloadStatus.COMPLETED -> IconButton(onClick = onPlay) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Play downloaded track",
+                        )
+                    }
+                }
+                if (!download.status.inProgress) {
+                    IconButton(onClick = onRemoveHistory) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Remove download history",
+                        )
+                    }
+                }
+                IconButton(onClick = onShowDetails) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = "Download details",
+                    )
+                }
             }
         },
     )
@@ -226,8 +285,7 @@ private fun DownloadProgress(
     modifier: Modifier = Modifier,
 ) {
     val determinate = download.status == DownloadStatus.DOWNLOADING ||
-        download.status == DownloadStatus.EXTRACTING ||
-        download.status == DownloadStatus.COMPLETED
+        download.status == DownloadStatus.EXTRACTING
 
     if (determinate) {
         Row(
@@ -251,25 +309,54 @@ private fun DownloadProgress(
     }
 }
 
+@Composable
+private fun DownloadDetailsDialog(
+    download: DownloadItem,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = download.title ?: "Download details") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(text = "Status: ${download.status.label}")
+                Text(text = "URL: ${download.url}")
+                download.workId?.let { Text(text = "Work ID: $it") }
+                download.diagnosticMessage?.let { Text(text = "Latest output: $it") }
+                download.errorMessage?.let { Text(text = "Error: $it") }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Close")
+            }
+        },
+    )
+}
+
 private val DownloadStatus.label: String
     get() = when (this) {
         DownloadStatus.QUEUED -> "Queued"
-        DownloadStatus.FETCHING_METADATA -> "Fetching metadata"
+        DownloadStatus.FETCHING_METADATA -> "Preparing"
         DownloadStatus.DOWNLOADING -> "Downloading"
-        DownloadStatus.EXTRACTING -> "Finalizing"
+        DownloadStatus.EXTRACTING -> "Adding to library"
         DownloadStatus.COMPLETED -> "Completed"
         DownloadStatus.FAILED -> "Failed"
         DownloadStatus.CANCELLED -> "Cancelled"
     }
 
 private val DownloadItem.statusLine: String
-    get() {
-        val percent = when (status) {
-            DownloadStatus.COMPLETED -> " 100%"
-            else -> ""
-        }
-        val workSuffix = workId?.take(8)?.let { " - work $it" } ?: ""
-        return status.label + percent + workSuffix
+    get() = when (status) {
+        DownloadStatus.QUEUED -> "Waiting for a connection or a free download slot"
+        DownloadStatus.FETCHING_METADATA -> "Preparing audio import"
+        DownloadStatus.DOWNLOADING -> "Downloading · ${progressPercentLabel}"
+        DownloadStatus.EXTRACTING -> "Adding to library · ${progressPercentLabel}"
+        DownloadStatus.COMPLETED -> "Completed"
+        DownloadStatus.FAILED -> "Failed"
+        DownloadStatus.CANCELLED -> "Cancelled"
     }
 
 private val DownloadItem.progressPercentLabel: String

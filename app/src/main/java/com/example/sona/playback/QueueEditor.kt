@@ -16,3 +16,8 @@ fun <T> List<T>.removeIndex(index: Int): List<T> {
         removeAt(index)
     }
 }
+
+internal fun <T> List<T>.insertItem(index: Int, item: T): List<T> =
+    toMutableList().apply {
+        add(index.coerceIn(0, size), item)
+    }
